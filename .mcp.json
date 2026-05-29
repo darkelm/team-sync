@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "team-sync": {
+      "command": "./.venv/bin/python3",
+      "args": ["./mcp_server.py"],
+      "env": {
+        "JIRA_PROVIDER": "local",
+        "CONFLUENCE_PROVIDER": "local",
+        "GITHUB_PROVIDER": "local",
+        "FIGMA_PROVIDER": "local"
+      }
+    }
+  }
+}

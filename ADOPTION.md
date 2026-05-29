@@ -117,9 +117,9 @@ The "AI supercharges the heuristics" half of the principle isn't built yet — m
 
 ---
 
-## Phase 6 — MCP server: supercharge *any* AI with our system (capability multiplier)
+## Phase 6 — MCP server: supercharge *any* AI with our system (capability multiplier) ✅ BUILT
 
-The strategic capstone, and the concrete delivery of the original cross-platform vision ("transferable to Replit, Codex, Lovable, Gemini"). Wrap the 14 tools as a **Model Context Protocol server** so Claude Desktop, Cursor, Cline, Gemini, and any MCP client get the entire coordination engine — no rewrite, no per-platform port.
+The strategic capstone, and the concrete delivery of the original cross-platform vision ("transferable to Replit, Codex, Lovable, Gemini"). The 14 tools are now a **Model Context Protocol server** (`mcp_server.py`, built on the official MCP SDK / FastMCP, with `.mcp.json` for one-step client setup) so Claude Desktop, Cursor, Cline, Gemini, and any MCP client get the entire coordination engine — no rewrite, no per-platform port.
 
 - **Portability:** MCP is the open standard built exactly for this; one server, every compatible AI surface.
 - **Grounding for any model:** any connected LLM gets our ground truth (manifests, tickets, drift, decisions) instead of hallucinating org facts — the "supercharge AI back" half, generalized beyond our own bot.

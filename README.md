@@ -183,11 +183,12 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] **Living manifests** (ADOPTION Phase 2) — `refresh-manifest` diffs reality vs manifest and proposes updates; `last_verified` freshness stamps; staleness flagged in `validate`
 
 - [x] **Claude agent** (ADOPTION Phase 3) — Opus 4.8 + adaptive thinking + prompt caching; all 14 capabilities exposed as tools; auto-activates when `ANTHROPIC_API_KEY` is set, keyword fallback otherwise; bot self-introduces on channel join
+- [x] **MCP server** (ADOPTION Phase 6) — all 14 tools exposed via Model Context Protocol; usable from Claude Desktop, Cursor, Cline, Gemini; the cross-platform portability unlock
 
 ### Next
 - [ ] Add the Anthropic API key to flip the live bot into natural-language mode (no code change)
-- [ ] New triggers: calendar-driven briefings, Figma webhook, nightly snapshot scan (see IDEAS.md trigger map)
-- [ ] Notification tuning (ADOPTION Phase 4) + deploy (Phase 5)
+- [ ] Structured outputs (ADOPTION Phase 3.5) — reliable AI meeting extraction + semantic matching with schema parity
+- [ ] Notification tuning (Phase 4) + Batch API + deploy (Phase 5)
 - [ ] **Deploy to Railway** — bot currently only runs while a local terminal session is alive; deploy as a background worker for 24/7 uptime (config + guide ready in DEPLOY.md, needs browser steps + rotated tokens)
 - [ ] GitHub live provider — activate (PAT needed)
 - [ ] Figma live provider — activate (access token needed)
@@ -295,6 +296,27 @@ Each import normalizes into the same JSON the local providers read, so every fea
 
 ---
 
+## Use it from any AI — the MCP server
+
+The portability layer. SyncBot's full coordination engine (all 14 tools) is exposed as a **Model Context Protocol server**, so Claude Desktop, Cursor, Cline, Gemini, or any MCP-compatible client gets the same grounded tools that back the Slack bot — no rewrite.
+
+```bash
+# Run directly (stdio)
+python mcp_server.py
+```
+
+To connect a client, point it at [`.mcp.json`](.mcp.json) (Claude Code/Cursor read this format directly):
+
+```json
+{
+  "mcpServers": {
+    "team-sync": { "command": "./.venv/bin/python3", "args": ["./mcp_server.py"] }
+  }
+}
+```
+
+The same `execute_tool` handlers back both the Slack agent and the MCP server — one brain, many doorways. Any connected model gets the org's ground truth (owners, tickets, drift, decisions) instead of hallucinating it. The engines behind the tools are pure code, so the server is useful even to clients without their own model. Requires Python 3.10+ (the MCP SDK's floor).
+
 ## Portability
 
-The skill/agent layer is platform-agnostic. The provider interfaces are the contract — any platform can call them. To port to Replit, Gemini, or another AI platform: reuse the provider layer and tool schemas, write a thin wrapper for that platform's agent runtime.
+The agent layer is platform-agnostic and the provider interfaces are the contract. The MCP server above is the primary portability path; for a fully native integration on another platform, reuse the provider layer and `execute_tool` and write a thin wrapper for that platform's runtime.
