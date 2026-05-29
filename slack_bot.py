@@ -216,13 +216,20 @@ def handle_query(text: str) -> str:
         return "Which team? Try: `@syncbot when does Team Atlas ship`"
 
     # Decision log search
-    if any(w in q for w in ["decision", "decided", "why did", "why was", "rationale"]):
-        # extract search term — words after "about" or "for" or just the last few words
-        search = re.sub(r".*(about|for|on|regarding)\s+", "", text, flags=re.I).strip("?.,")
-        pages = providers.confluence.search_pages(search)
-        decision_pages = [p for p in pages if p.decision_log]
+    if any(w in q for w in ["decision", "decided", "decide", "why did", "why was", "why we", "rationale"]):
+        # extract search phrase, then also try individual significant words so
+        # "what did we decide about the design system v3 tokens" still matches.
+        phrase = re.sub(r".*(about|for|on|regarding)\s+", "", text, flags=re.I).strip("?.,")
+        stop = {"the", "and", "why", "what", "did", "we", "a", "an", "of", "to", "about", "decide", "decided", "is", "for"}
+        terms = [w.strip("?.,") for w in (phrase or text).split() if w.lower() not in stop and len(w) > 2]
+        seen_ids, decision_pages = set(), []
+        for term in [phrase] + terms:
+            for p in providers.confluence.search_pages(term):
+                if p.decision_log and p.id not in seen_ids:
+                    seen_ids.add(p.id)
+                    decision_pages.append(p)
         if not decision_pages:
-            return f"No decision logs found for `{search}`. It may not have been formally documented yet."
+            return f"No decision logs found for `{phrase or text}`. It may not have been formally documented yet."
         lines = []
         for p in decision_pages[:3]:
             dl = p.decision_log
@@ -252,12 +259,16 @@ def handle_query(text: str) -> str:
                          + ", ".join(f"{s.team_a}↔{s.team_b}" for s in linked[:4]))
         return "\n".join(lines)
 
-    # Reuse radar — has someone already built this?
-    if any(w in q for w in ["already built", "already exist", "reuse", "anyone built", "has anyone", "similar to", "already solved", "already designed"]):
-        # crude payload extraction: text after common lead-ins
+    # Reuse radar — has someone already built/designed this?
+    if any(w in q for w in ["already built", "already exist", "reuse", "anyone built", "has anyone",
+                            "similar to", "already solved", "already designed", "already designed somewhere",
+                            "does this exist", "is there already"]):
+        # Match against the whole message (subject often precedes the trigger,
+        # e.g. "is the notification bell already designed?"). Strip filler words.
         import re as _re
-        desc = _re.sub(r".*(built|exist[s]?|designed|solved|similar to|reuse|anyone|has anyone)\b", "", text, flags=_re.I).strip(" ?.")
-        desc = desc or text
+        desc = _re.sub(r"\b(is|the|a|an|already|built|designed|exists?|somewhere|anyone|has|does|this|there|"
+                       r"reuse|solved|similar|to|do|we|have)\b", " ", text, flags=_re.I)
+        desc = _re.sub(r"\s+", " ", desc).strip(" ?.") or text
         matches = reuse_radar.search(desc)
         if not matches:
             return f"Nothing similar found for “{desc}”. Looks net-new — good to proceed."
@@ -289,13 +300,15 @@ def handle_query(text: str) -> str:
         lines.append(f"_{coverage}/{total} team goals ({pct}%) ladder up to a company objective._")
         return "\n".join(lines)
 
-    # Cross-team meeting briefing
-    if any(w in q for w in ["prep", "brief", "briefing", "meeting", "sync with", "agenda"]):
+    # Cross-team meeting briefing (only acts on 2+ teams; otherwise falls through
+    # so e.g. "is Team X's design in sync" reaches the design-sync handler)
+    if any(w in q for w in ["prep", "brief", "briefing", "meeting", "agenda"]) or "sync with" in q:
         team_names = _match_teams(text)
         if len(team_names) >= 2:
             return briefing_gen.cross_team_briefing(team_names)
-        return ("For a cross-team briefing, name at least two teams. "
-                "Try: `@syncbot prep me for a sync with Team Atlas and Team Forge`")
+        if any(w in q for w in ["prep", "brief", "briefing", "agenda"]):
+            return ("For a cross-team briefing, name at least two teams. "
+                    "Try: `@syncbot prep me for a sync with Team Atlas and Team Forge`")
 
     # Predicted / future conflicts
     if any(w in q for w in ["predict", "predicted", "future conflict", "upcoming conflict", "collision", "before they"]):
