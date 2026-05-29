@@ -1,0 +1,58 @@
+team: Team Atlas
+description: Data & APIs — owns the core API gateway, data pipeline, and all platform-level data services.
+owner:
+  name: Jordan Kim
+  role: Engineering Lead
+  slack_handle: "@jordan.kim"
+  email: jordan.kim@acme.co
+members:
+  - name: Fatima Al-Hassan
+    role: Senior Engineer
+    slack_handle: "@fatima.al-hassan"
+    email: fatima.al-hassan@acme.co
+  - name: Raj Patel
+    role: Engineer
+    slack_handle: "@raj.patel"
+    email: raj.patel@acme.co
+  - name: Chloe Dubois
+    role: Designer
+    slack_handle: "@chloe.dubois"
+    email: chloe.dubois@acme.co
+slack_channel: "#atlas-team"
+jira_project: ATL
+confluence_space: ATLAS
+figma_files:
+  - name: Atlas Data Dashboards
+    url: https://figma.com/file/def456/atlas-dashboards
+    last_updated: "2026-05-20"
+design_system_library: https://figma.com/file/nova-design-system/nova-ds
+components:
+  code:
+    - name: api-gateway
+      path: src/api/gateway
+      description: Central API gateway, rate limiting, routing
+    - name: user-profile-api
+      path: src/api/user-profile
+      description: User profile CRUD, preferences, account data
+    - name: token-validation
+      path: src/api/auth/validate
+      description: "Server-side token validation service — NOTE: planning to change schema in Q3"
+    - name: data-pipeline
+      path: src/pipeline
+      description: ETL pipeline for analytics and reporting
+  design:
+    - name: DataTable
+      figma_node_id: "456:111"
+      description: Reusable data table component used across dashboards
+    - name: FilterPanel
+      figma_node_id: "456:222"
+      description: Filter and search panel for data views
+dependencies:
+  - team: Team Nova
+    reason: Uses shared design system for all dashboard UI
+    components: [Button, DataTable, Badge]
+roadmap_link: https://confluence.acme.co/wiki/ATLAS/roadmap
+quarter_goals:
+  - Migrate API gateway to new routing schema (BREAKING CHANGE — affects Phoenix and Horizon)
+  - Launch real-time data pipeline v2
+  - Deprecate v1 token validation endpoint

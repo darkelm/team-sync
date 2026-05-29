@@ -1,0 +1,47 @@
+[
+  {
+    "id": "nova-btn-001",
+    "name": "Button",
+    "file_id": "nova-design-system",
+    "file_name": "Nova Design System (CANONICAL)",
+    "team": "Team Nova",
+    "description": "Primary, secondary, ghost, and destructive button variants. Now includes icon-only variant (shipped March 2026).",
+    "status": "dev_ready",
+    "last_modified": "2026-03-15T10:00:00Z",
+    "variants": ["primary", "secondary", "ghost", "destructive", "icon-only"],
+    "used_by_teams": ["Team Phoenix", "Team Atlas", "Team Forge"],
+    "is_library_component": true,
+    "diverges_from_library": false,
+    "divergence_notes": null
+  },
+  {
+    "id": "nova-notif-001",
+    "name": "NotificationBell",
+    "file_id": "nova-design-system",
+    "file_name": "Nova Design System (CANONICAL)",
+    "team": "Team Nova",
+    "description": "Notification bell with unread count badge. Canonical version — use this, not custom implementations.",
+    "status": "dev_ready",
+    "last_modified": "2026-04-10T10:00:00Z",
+    "variants": ["default", "with-count", "muted"],
+    "used_by_teams": [],
+    "is_library_component": true,
+    "diverges_from_library": false,
+    "divergence_notes": null
+  },
+  {
+    "id": "nova-table-001",
+    "name": "DataTable",
+    "file_id": "nova-design-system",
+    "file_name": "Nova Design System (CANONICAL)",
+    "team": "Team Nova",
+    "description": "Canonical data table with sortable columns, pagination, and new row hover state (blue-50). Updated 2026-05-27.",
+    "status": "dev_ready",
+    "last_modified": "2026-05-27T16:00:00Z",
+    "variants": ["default", "compact", "striped"],
+    "used_by_teams": ["Team Atlas", "Team Horizon"],
+    "is_library_component": true,
+    "diverges_from_library": false,
+    "divergence_notes": null
+  }
+]

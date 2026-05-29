@@ -1,0 +1,54 @@
+team: Team Forge
+description: Developer Platform — owns CI/CD infrastructure, developer tooling, deployment pipelines, and internal developer portal.
+owner:
+  name: Elena Vasquez
+  role: Platform Engineering Lead
+  slack_handle: "@elena.vasquez"
+  email: elena.vasquez@acme.co
+members:
+  - name: Chris Park
+    role: Senior Platform Engineer
+    slack_handle: "@chris.park"
+    email: chris.park@acme.co
+  - name: Nia Thompson
+    role: Platform Engineer
+    slack_handle: "@nia.thompson"
+    email: nia.thompson@acme.co
+slack_channel: "#forge-platform"
+jira_project: FRG
+confluence_space: FORGE
+figma_files:
+  - name: Forge Developer Portal
+    url: https://figma.com/file/ghi789/forge-portal
+    last_updated: "2026-04-15"
+design_system_library: https://figma.com/file/nova-design-system/nova-ds
+components:
+  code:
+    - name: ci-pipeline
+      path: infra/ci
+      description: GitHub Actions workflows, build and test pipelines
+    - name: deploy-service
+      path: infra/deploy
+      description: Deployment orchestration, rollback, feature flags
+    - name: api-gateway-config
+      path: infra/gateway
+      description: API gateway routing config — ALSO planning changes in Q3 (conflict with Atlas)
+    - name: developer-portal
+      path: src/portal
+      description: Internal developer portal — team catalog, runbooks, oncall
+  design:
+    - name: StatusIndicator
+      figma_node_id: "901:100"
+      description: Build/deploy status indicator — custom implementation, not using Nova's Badge
+dependencies:
+  - team: Team Atlas
+    reason: Deploy pipeline routes through the API gateway
+    components: [api-gateway]
+  - team: Team Nova
+    reason: Developer portal uses design system
+    components: [Button, FormInput]
+roadmap_link: https://confluence.acme.co/wiki/FORGE/roadmap
+quarter_goals:
+  - Migrate all teams to new deployment pipeline by Q2 end
+  - Launch developer portal v2 with self-service onboarding
+  - Implement API gateway v2 config schema (overlaps with Atlas plans)

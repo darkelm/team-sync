@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ATL-DOC-001",
+    "title": "API Gateway v2 Migration Plan — DRAFT",
+    "space": "ATLAS",
+    "team": "Team Atlas",
+    "content_summary": "Draft migration plan for API gateway v2 routing schema. Breaking change affecting Phoenix, Horizon, and Forge. No decision log yet — plan not finalized. Forge is unaware they have overlapping plans.",
+    "tags": ["api-gateway", "migration", "draft", "breaking-change"],
+    "last_updated": "2026-05-25",
+    "author": "Fatima Al-Hassan",
+    "url": "https://confluence.acme.co/wiki/ATLAS/plans/gateway-v2",
+    "decision_log": null
+  },
+  {
+    "id": "ATL-DOC-002",
+    "title": "Decision: Real-time Pipeline Architecture",
+    "space": "ATLAS",
+    "team": "Team Atlas",
+    "content_summary": "Decision to adopt event-driven architecture for data pipeline v2. Replaces batch ETL. Horizon notification feed is primary consumer and must migrate.",
+    "tags": ["decision-log", "pipeline", "real-time", "architecture"],
+    "last_updated": "2026-04-20",
+    "author": "Jordan Kim",
+    "url": "https://confluence.acme.co/wiki/ATLAS/decisions/realtime-pipeline",
+    "decision_log": {
+      "id": "DEC-ATL-001",
+      "title": "Adopt event-driven architecture for data pipeline v2",
+      "decision": "Replace batch ETL with event-driven pipeline using Kafka. All consumers must migrate to subscription model.",
+      "rationale": "Batch pipeline introduced 15-minute data lag causing poor UX for notifications. Real-time events eliminate this.",
+      "alternatives_considered": ["Reduce batch frequency to 1 minute", "Keep batch for non-realtime consumers"],
+      "decided_by": ["Jordan Kim", "Fatima Al-Hassan", "Tyler Brooks"],
+      "date": "2026-04-20",
+      "status": "approved",
+      "related_tickets": ["ATL-202", "HRZ-302"],
+      "related_components": ["data-pipeline", "notifications"],
+      "team": "Team Atlas"
+    }
+  }
+]

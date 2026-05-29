@@ -1,0 +1,14 @@
+[
+  {
+    "id": "FRG-DOC-001",
+    "title": "Developer Portal v2 — Architecture",
+    "space": "FORGE",
+    "team": "Team Forge",
+    "content_summary": "Architecture overview for developer portal v2. Uses Nova design system except StatusIndicator which was custom-built due to Badge component not meeting requirements at time of build.",
+    "tags": ["architecture", "developer-portal"],
+    "last_updated": "2026-04-20",
+    "author": "Elena Vasquez",
+    "url": "https://confluence.acme.co/wiki/FORGE/architecture/portal-v2",
+    "decision_log": null
+  }
+]

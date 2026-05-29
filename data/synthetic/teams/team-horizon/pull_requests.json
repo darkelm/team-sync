@@ -1,0 +1,18 @@
+[
+  {
+    "id": "HRZ-PR-67",
+    "title": "feat: dashboard redesign — new grid layout",
+    "description": "Redesigned dashboard with new widget grid. Uses local Button override (not Nova DS). NotificationBell is custom implementation.",
+    "status": "open",
+    "author": "mei.lin",
+    "team": "Team Horizon",
+    "base_branch": "main",
+    "head_branch": "feat/dashboard-redesign",
+    "files_changed": ["src/dashboard/DashboardLayout.tsx", "src/dashboard/widgets/", "src/components/Button/Button.tsx", "src/notifications/NotificationBell.tsx"],
+    "components_touched": ["dashboard", "button", "notifications"],
+    "created_at": "2026-05-23T09:00:00Z",
+    "merged_at": null,
+    "linked_tickets": [],
+    "cross_team_impact": []
+  }
+]

@@ -1,0 +1,64 @@
+team: Team Nova
+description: Design System — owns the Acme design system, shared component library, and design tokens. The canonical source of truth for all UI patterns.
+owner:
+  name: Amara Osei
+  role: Design System Lead
+  slack_handle: "@amara.osei"
+  email: amara.osei@acme.co
+members:
+  - name: Ben Nakamura
+    role: Design Engineer
+    slack_handle: "@ben.nakamura"
+    email: ben.nakamura@acme.co
+  - name: Lucia Ferreira
+    role: Senior Designer
+    slack_handle: "@lucia.ferreira"
+    email: lucia.ferreira@acme.co
+  - name: Tom Bradley
+    role: Engineer
+    slack_handle: "@tom.bradley"
+    email: tom.bradley@acme.co
+slack_channel: "#nova-design-system"
+jira_project: NOVA
+confluence_space: NOVA
+figma_files:
+  - name: Nova Design System (CANONICAL)
+    url: https://figma.com/file/nova-design-system/nova-ds
+    last_updated: "2026-05-27"
+  - name: Nova Component Specs
+    url: https://figma.com/file/nova-specs/component-specs
+    last_updated: "2026-05-25"
+design_system_library: https://figma.com/file/nova-design-system/nova-ds
+components:
+  code:
+    - name: design-system
+      path: packages/design-system
+      description: Published npm package — shared React components and design tokens
+    - name: tokens
+      path: packages/design-system/tokens
+      description: Design tokens (color, spacing, typography) — source of truth
+  design:
+    - name: Button
+      figma_node_id: "789:100"
+      description: Primary, secondary, ghost, and destructive button variants
+    - name: FormInput
+      figma_node_id: "789:200"
+      description: Text input, textarea, select — all form controls
+    - name: Modal
+      figma_node_id: "789:300"
+      description: Modal, drawer, and dialog patterns
+    - name: Badge
+      figma_node_id: "789:400"
+      description: Status badge, count badge, label variants
+    - name: DataTable
+      figma_node_id: "789:500"
+      description: Canonical data table — NOTE updated with new row hover state 2026-05-27
+    - name: NotificationBell
+      figma_node_id: "789:600"
+      description: Notification bell icon with count indicator
+dependencies: []
+roadmap_link: https://confluence.acme.co/wiki/NOVA/roadmap
+quarter_goals:
+  - Ship design system v3.0 with updated color tokens (breaking change for all teams)
+  - Document all components with usage guidelines
+  - Establish design review process for cross-team component proposals

@@ -1,0 +1,67 @@
+team: Team Horizon
+description: Product & Frontend — owns the main customer-facing application, dashboard, onboarding flows, and notifications.
+owner:
+  name: Tyler Brooks
+  role: Product Engineering Lead
+  slack_handle: "@tyler.brooks"
+  email: tyler.brooks@acme.co
+members:
+  - name: Mei Lin
+    role: Senior Frontend Engineer
+    slack_handle: "@mei.lin"
+    email: mei.lin@acme.co
+  - name: Jamal Foster
+    role: Designer
+    slack_handle: "@jamal.foster"
+    email: jamal.foster@acme.co
+  - name: Anna Kowalski
+    role: Frontend Engineer
+    slack_handle: "@anna.kowalski"
+    email: anna.kowalski@acme.co
+slack_channel: "#horizon-product"
+jira_project: HRZ
+confluence_space: HORIZON
+figma_files:
+  - name: Horizon Product UI
+    url: https://figma.com/file/jkl012/horizon-product-ui
+    last_updated: "2026-05-22"
+design_system_library: https://figma.com/file/nova-design-system/nova-ds
+components:
+  code:
+    - name: dashboard
+      path: src/dashboard
+      description: Main user dashboard, widgets, layout
+    - name: notifications
+      path: src/notifications
+      description: In-app notification system — custom implementation
+    - name: onboarding
+      path: src/onboarding
+      description: New user onboarding flow
+    - name: button
+      path: src/components/Button
+      description: Local Button component — DRIFT WARNING diverged from Nova design system
+  design:
+    - name: NotificationBell
+      figma_node_id: "012:100"
+      description: Horizon's own notification bell — slightly different from Nova's canonical version
+    - name: OnboardingFlow
+      figma_node_id: "012:200"
+      description: Multi-step onboarding wizard
+    - name: DashboardLayout
+      figma_node_id: "012:300"
+      description: Main dashboard grid and widget layout
+dependencies:
+  - team: Team Phoenix
+    reason: All auth flows, session handling, and login redirect
+    components: [auth, login, token-manager]
+  - team: Team Atlas
+    reason: Fetches user profile data and notification feed from APIs
+    components: [user-profile-api, api-gateway]
+  - team: Team Nova
+    reason: Supposed to use design system — some components have drifted locally
+    components: [Button, Modal, NotificationBell]
+roadmap_link: https://confluence.acme.co/wiki/HORIZON/roadmap
+quarter_goals:
+  - Launch redesigned dashboard by Q2 end
+  - Migrate all local component overrides back to Nova design system
+  - Ship notifications v2 with real-time updates

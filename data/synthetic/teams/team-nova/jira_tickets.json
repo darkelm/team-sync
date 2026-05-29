@@ -1,0 +1,53 @@
+[
+  {
+    "id": "NOVA-401",
+    "title": "Ship design system v3.0 — new color tokens",
+    "description": "v3 introduces a completely new color token naming convention. All teams using the design system will need to update. This is a breaking change. Horizon has already diverged locally and will be most impacted.",
+    "status": "in_progress",
+    "priority": "high",
+    "assignee": "Lucia Ferreira",
+    "team": "Team Nova",
+    "labels": ["design-system", "breaking-change", "color-tokens", "q2"],
+    "due_date": "2026-06-20",
+    "created_at": "2026-04-01T09:00:00Z",
+    "updated_at": "2026-05-27T09:00:00Z",
+    "linked_tickets": ["HRZ-310", "PHX-104", "ATL-210"],
+    "components": ["design-system", "tokens"],
+    "epic": "Design System v3",
+    "planned_quarter": "Q2-2026"
+  },
+  {
+    "id": "NOVA-402",
+    "title": "Update DataTable with new row hover state",
+    "description": "Row hover now uses a subtle blue tint instead of gray. Published to library 2026-05-27. Atlas and Horizon both consume DataTable — their Figma files need to be resynced.",
+    "status": "done",
+    "priority": "medium",
+    "assignee": "Ben Nakamura",
+    "team": "Team Nova",
+    "labels": ["design-system", "DataTable", "figma"],
+    "due_date": "2026-05-27",
+    "created_at": "2026-05-10T09:00:00Z",
+    "updated_at": "2026-05-27T17:00:00Z",
+    "linked_tickets": [],
+    "components": ["design-system"],
+    "epic": "Design System v3",
+    "planned_quarter": "Q2-2026"
+  },
+  {
+    "id": "NOVA-403",
+    "title": "Establish design review process for cross-team components",
+    "description": "Three teams have now built their own notification bell. Need a formal process so teams propose to Nova before building custom components.",
+    "status": "in_progress",
+    "priority": "high",
+    "assignee": "Amara Osei",
+    "team": "Team Nova",
+    "labels": ["process", "governance", "cross-team"],
+    "due_date": "2026-06-15",
+    "created_at": "2026-05-20T09:00:00Z",
+    "updated_at": "2026-05-28T11:00:00Z",
+    "linked_tickets": [],
+    "components": ["design-system"],
+    "epic": "Design Governance",
+    "planned_quarter": "Q2-2026"
+  }
+]

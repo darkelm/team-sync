@@ -1,0 +1,212 @@
+from __future__ import annotations
+from datetime import date, datetime
+from enum import Enum
+from typing import Optional
+from pydantic import BaseModel, Field
+
+
+# ── Enums ────────────────────────────────────────────────────────────────────
+
+class TicketStatus(str, Enum):
+    backlog = "backlog"
+    todo = "todo"
+    in_progress = "in_progress"
+    in_review = "in_review"
+    done = "done"
+    blocked = "blocked"
+
+class TicketPriority(str, Enum):
+    critical = "critical"
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+class PRStatus(str, Enum):
+    open = "open"
+    merged = "merged"
+    closed = "closed"
+    draft = "draft"
+
+class DesignStatus(str, Enum):
+    exploration = "exploration"
+    in_progress = "in_progress"
+    ready_for_review = "ready_for_review"
+    approved = "approved"
+    dev_ready = "dev_ready"
+
+class DriftSeverity(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
+# ── Team Manifest ─────────────────────────────────────────────────────────────
+
+class TeamMember(BaseModel):
+    name: str
+    role: str
+    slack_handle: str
+    email: str
+
+class CodeComponent(BaseModel):
+    name: str
+    path: str
+    description: str
+
+class DesignComponent(BaseModel):
+    name: str
+    figma_node_id: Optional[str] = None
+    description: str
+
+class TeamComponents(BaseModel):
+    code: list[CodeComponent] = Field(default_factory=list)
+    design: list[DesignComponent] = Field(default_factory=list)
+
+class TeamDependency(BaseModel):
+    team: str
+    reason: str
+    components: list[str] = Field(default_factory=list)
+
+class FigmaFile(BaseModel):
+    name: str
+    url: str
+    last_updated: Optional[date] = None
+
+class TeamManifest(BaseModel):
+    team: str
+    description: str
+    owner: TeamMember
+    members: list[TeamMember] = Field(default_factory=list)
+    slack_channel: str
+    jira_project: str
+    confluence_space: str
+    figma_files: list[FigmaFile] = Field(default_factory=list)
+    design_system_library: Optional[str] = None
+    components: TeamComponents = Field(default_factory=TeamComponents)
+    dependencies: list[TeamDependency] = Field(default_factory=list)
+    roadmap_link: Optional[str] = None
+    quarter_goals: list[str] = Field(default_factory=list)
+
+
+# ── Jira ─────────────────────────────────────────────────────────────────────
+
+class Ticket(BaseModel):
+    id: str
+    title: str
+    description: str
+    status: TicketStatus
+    priority: TicketPriority
+    assignee: Optional[str] = None
+    team: str
+    labels: list[str] = Field(default_factory=list)
+    due_date: Optional[date] = None
+    created_at: datetime
+    updated_at: datetime
+    linked_tickets: list[str] = Field(default_factory=list)
+    components: list[str] = Field(default_factory=list)
+    epic: Optional[str] = None
+    planned_quarter: Optional[str] = None
+
+
+# ── Confluence ────────────────────────────────────────────────────────────────
+
+class DecisionLog(BaseModel):
+    id: str
+    title: str
+    decision: str
+    rationale: str
+    alternatives_considered: list[str] = Field(default_factory=list)
+    decided_by: list[str]
+    date: date
+    status: str  # "approved", "superseded", "draft"
+    related_tickets: list[str] = Field(default_factory=list)
+    related_components: list[str] = Field(default_factory=list)
+    team: str
+
+class ConfluencePage(BaseModel):
+    id: str
+    title: str
+    space: str
+    team: str
+    content_summary: str
+    tags: list[str] = Field(default_factory=list)
+    last_updated: date
+    author: str
+    url: str
+    decision_log: Optional[DecisionLog] = None
+
+
+# ── GitHub ────────────────────────────────────────────────────────────────────
+
+class PullRequest(BaseModel):
+    id: str
+    title: str
+    description: str
+    status: PRStatus
+    author: str
+    team: str
+    base_branch: str
+    head_branch: str
+    files_changed: list[str] = Field(default_factory=list)
+    components_touched: list[str] = Field(default_factory=list)
+    created_at: datetime
+    merged_at: Optional[datetime] = None
+    linked_tickets: list[str] = Field(default_factory=list)
+    cross_team_impact: list[str] = Field(default_factory=list)
+
+
+# ── Figma ─────────────────────────────────────────────────────────────────────
+
+class FigmaComponent(BaseModel):
+    id: str
+    name: str
+    file_id: str
+    file_name: str
+    team: str
+    description: str
+    status: DesignStatus
+    last_modified: datetime
+    variants: list[str] = Field(default_factory=list)
+    used_by_teams: list[str] = Field(default_factory=list)
+    is_library_component: bool = False
+    diverges_from_library: bool = False
+    divergence_notes: Optional[str] = None
+
+
+# ── Drift + Conflicts ─────────────────────────────────────────────────────────
+
+class DriftIssue(BaseModel):
+    id: str
+    type: str  # "code_drift", "design_drift", "missing_decision_log", "dep_conflict"
+    severity: DriftSeverity
+    title: str
+    description: str
+    teams_involved: list[str]
+    components_involved: list[str]
+    detected_at: datetime
+    suggested_action: str
+
+class ConflictPrediction(BaseModel):
+    id: str
+    title: str
+    description: str
+    teams_involved: list[str]
+    tickets_involved: list[str]
+    components_at_risk: list[str]
+    predicted_collision_date: Optional[date] = None
+    severity: DriftSeverity
+    suggested_action: str
+
+
+# ── Digest ────────────────────────────────────────────────────────────────────
+
+class TeamDigest(BaseModel):
+    team: str
+    week_of: date
+    dev_updates: list[str] = Field(default_factory=list)
+    design_updates: list[str] = Field(default_factory=list)
+    dependency_changes: list[str] = Field(default_factory=list)
+    open_conflicts: list[DriftIssue] = Field(default_factory=list)
+    predicted_conflicts: list[ConflictPrediction] = Field(default_factory=list)
+    action_items: list[str] = Field(default_factory=list)

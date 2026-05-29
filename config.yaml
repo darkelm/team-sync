@@ -1,0 +1,22 @@
+# Team Sync — provider configuration
+# Switch any provider from "local" to "live" when credentials are ready.
+# Nothing else in the codebase needs to change.
+
+providers:
+  jira: live
+  confluence: live
+  github: local
+  slack: local
+  figma: local
+
+data:
+  synthetic_path: ./data/synthetic
+  teams_dir: ./data/synthetic/teams
+
+digest:
+  schedule: "0 9 * * 1"   # Monday 9am
+  timezone: "America/New_York"
+
+drift:
+  scan_on_pr: true
+  scan_schedule: "0 8 * * *"   # Daily 8am

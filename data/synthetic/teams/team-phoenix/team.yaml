@@ -1,0 +1,58 @@
+team: Team Phoenix
+description: Auth & Identity — owns all authentication, authorization, and session management across the platform.
+owner:
+  name: Sarah Chen
+  role: Engineering Lead
+  slack_handle: "@sarah.chen"
+  email: sarah.chen@acme.co
+members:
+  - name: Marcus Webb
+    role: Senior Engineer
+    slack_handle: "@marcus.webb"
+    email: marcus.webb@acme.co
+  - name: Priya Nair
+    role: Designer
+    slack_handle: "@priya.nair"
+    email: priya.nair@acme.co
+  - name: Diego Alvarez
+    role: Engineer
+    slack_handle: "@diego.alvarez"
+    email: diego.alvarez@acme.co
+slack_channel: "#phoenix-team"
+jira_project: PHX
+confluence_space: PHOENIX
+figma_files:
+  - name: Phoenix Auth Flows
+    url: https://figma.com/file/abc123/phoenix-auth-flows
+    last_updated: "2026-05-10"
+design_system_library: https://figma.com/file/nova-design-system/nova-ds
+components:
+  code:
+    - name: auth
+      path: src/auth
+      description: Core authentication logic, JWT handling, session management
+    - name: login
+      path: src/auth/login
+      description: Login page, OAuth redirect handlers
+    - name: token-manager
+      path: src/auth/tokens
+      description: Token refresh, revocation, storage
+  design:
+    - name: LoginFlow
+      figma_node_id: "123:456"
+      description: Full login and registration user flow
+    - name: AuthModal
+      figma_node_id: "123:789"
+      description: In-app authentication modal for session expiry
+dependencies:
+  - team: Team Atlas
+    reason: Consumes the user-profile API and token validation endpoints
+    components: [user-profile-api, token-validation]
+  - team: Team Nova
+    reason: Uses shared design system components for all auth UI
+    components: [Button, FormInput, Modal]
+roadmap_link: https://confluence.acme.co/wiki/PHOENIX/roadmap
+quarter_goals:
+  - Ship OAuth 2.0 PKCE flow by end of Q2
+  - Migrate session storage from Redis to Postgres
+  - Audit all token expiry logic for compliance

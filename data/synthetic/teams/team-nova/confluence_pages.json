@@ -1,0 +1,38 @@
+[
+  {
+    "id": "NOVA-DOC-001",
+    "title": "Decision: Design System v3 Token Naming Convention",
+    "space": "NOVA",
+    "team": "Team Nova",
+    "content_summary": "Decision to adopt semantic token naming in v3. All color tokens renamed from palette-based (blue-500) to semantic (color-primary-default). Breaking change for all consumers.",
+    "tags": ["decision-log", "design-system", "tokens", "v3"],
+    "last_updated": "2026-05-01",
+    "author": "Amara Osei",
+    "url": "https://confluence.acme.co/wiki/NOVA/decisions/v3-tokens",
+    "decision_log": {
+      "id": "DEC-NOVA-001",
+      "title": "Semantic token naming for design system v3",
+      "decision": "All design tokens renamed to semantic convention. Old palette names deprecated. Migration guide published.",
+      "rationale": "Palette naming tightly couples tokens to specific colors, making theme changes impossible. Semantic naming enables theming.",
+      "alternatives_considered": ["Alias old names to new names", "Ship both naming systems simultaneously"],
+      "decided_by": ["Amara Osei", "Lucia Ferreira", "Ben Nakamura"],
+      "date": "2026-05-01",
+      "status": "approved",
+      "related_tickets": ["NOVA-401"],
+      "related_components": ["tokens", "design-system", "Button", "FormInput", "Modal"],
+      "team": "Team Nova"
+    }
+  },
+  {
+    "id": "NOVA-DOC-002",
+    "title": "NotificationBell — Design Review Findings",
+    "space": "NOVA",
+    "team": "Team Nova",
+    "content_summary": "Design review found three separate notification bell implementations across the platform: Nova canonical, Horizon custom, and Forge StatusIndicator. Action: all teams to adopt Nova canonical in Q3.",
+    "tags": ["design-review", "notification", "drift", "cross-team"],
+    "last_updated": "2026-05-28",
+    "author": "Amara Osei",
+    "url": "https://confluence.acme.co/wiki/NOVA/reviews/notification-bell-drift",
+    "decision_log": null
+  }
+]

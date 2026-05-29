@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ATL-PR-88",
+    "title": "feat: real-time pipeline v2 — Kafka event streaming",
+    "description": "Replaces batch ETL with Kafka-based event streaming. Data shape for notification events changes — Horizon must update their consumer.",
+    "status": "open",
+    "author": "raj.patel",
+    "team": "Team Atlas",
+    "base_branch": "main",
+    "head_branch": "feat/realtime-pipeline-v2",
+    "files_changed": ["src/pipeline/kafka.ts", "src/pipeline/events.ts", "src/api/notifications/schema.ts"],
+    "components_touched": ["data-pipeline"],
+    "created_at": "2026-05-22T09:00:00Z",
+    "merged_at": null,
+    "linked_tickets": ["ATL-202"],
+    "cross_team_impact": ["Team Horizon"]
+  }
+]

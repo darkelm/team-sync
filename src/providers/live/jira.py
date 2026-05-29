@@ -1,0 +1,56 @@
+import os
+import httpx
+from typing import Optional
+from ...core.schemas import Ticket, TicketStatus, TicketPriority
+from ..base import JiraProvider
+from datetime import datetime
+
+
+class LiveJiraProvider(JiraProvider):
+    def __init__(self):
+        self.base_url = os.environ["ATLASSIAN_URL"].rstrip("/")
+        self.email = os.environ["ATLASSIAN_EMAIL"]
+        self.token = os.environ["ATLASSIAN_API_TOKEN"]
+        self.auth = (self.email, self.token)
+
+    def _get(self, path: str, params: dict = None) -> dict:
+        r = httpx.get(f"{self.base_url}/rest/api/3{path}", params=params, auth=self.auth)
+        r.raise_for_status()
+        return r.json()
+
+    def _to_ticket(self, item: dict) -> Ticket:
+        fields = item["fields"]
+        return Ticket(
+            id=item["key"],
+            title=fields["summary"],
+            description=(fields.get("description") or {}).get("text", "") if isinstance(fields.get("description"), dict) else str(fields.get("description") or ""),
+            status=TicketStatus(fields["status"]["statusCategory"]["key"].replace(" ", "_").lower()),
+            priority=TicketPriority(fields["priority"]["name"].lower()) if fields.get("priority") else TicketPriority.medium,
+            assignee=fields.get("assignee", {}).get("displayName") if fields.get("assignee") else None,
+            team=fields.get("project", {}).get("key", ""),
+            labels=fields.get("labels", []),
+            due_date=fields.get("duedate"),
+            created_at=datetime.fromisoformat(fields["created"].replace("Z", "+00:00")),
+            updated_at=datetime.fromisoformat(fields["updated"].replace("Z", "+00:00")),
+            components=[c["name"] for c in fields.get("components", [])],
+        )
+
+    def get_tickets(self, team: Optional[str] = None, status: Optional[str] = None) -> list[Ticket]:
+        jql = f'project = "{team}"' if team else "order by updated DESC"
+        if status:
+            jql += f' AND status = "{status}"'
+        data = self._get("/search", {"jql": jql, "maxResults": 100})
+        return [self._to_ticket(i) for i in data.get("issues", [])]
+
+    def get_ticket(self, ticket_id: str) -> Optional[Ticket]:
+        data = self._get(f"/issue/{ticket_id}")
+        return self._to_ticket(data)
+
+    def get_tickets_by_component(self, component: str) -> list[Ticket]:
+        data = self._get("/search", {"jql": f'component = "{component}"', "maxResults": 50})
+        return [self._to_ticket(i) for i in data.get("issues", [])]
+
+    def get_upcoming_deliverables(self, team: str) -> list[Ticket]:
+        jql = f'project = "{team}" AND status in ("To Do", "In Progress", "In Review") AND dueDate is not EMPTY ORDER BY dueDate ASC'
+        data = self._get("/search", {"jql": jql, "maxResults": 20})
+        return [self._to_ticket(i) for i in data.get("issues", [])]

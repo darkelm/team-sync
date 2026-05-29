@@ -1,0 +1,17 @@
+[
+  {
+    "id": "frg-status-001",
+    "name": "StatusIndicator",
+    "file_id": "ghi789",
+    "file_name": "Forge Developer Portal",
+    "team": "Team Forge",
+    "description": "Custom build/deploy status indicator. Built before Nova shipped Badge. Should be migrated to Nova Badge now that Badge supports status variants.",
+    "status": "dev_ready",
+    "last_modified": "2026-03-01T10:00:00Z",
+    "variants": ["success", "warning", "error", "pending"],
+    "used_by_teams": [],
+    "is_library_component": false,
+    "diverges_from_library": true,
+    "divergence_notes": "Nova Badge now supports all status variants (shipped Q1 2026). StatusIndicator is a redundant custom implementation that should be replaced."
+  }
+]

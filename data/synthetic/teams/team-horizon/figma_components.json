@@ -1,0 +1,32 @@
+[
+  {
+    "id": "hrz-notif-001",
+    "name": "NotificationBell",
+    "file_id": "jkl012",
+    "file_name": "Horizon Product UI",
+    "team": "Team Horizon",
+    "description": "Horizon's custom notification bell. Uses different icon weight and positions badge differently than Nova canonical.",
+    "status": "in_progress",
+    "last_modified": "2026-05-10T14:00:00Z",
+    "variants": ["default", "with-count"],
+    "used_by_teams": [],
+    "is_library_component": false,
+    "diverges_from_library": true,
+    "divergence_notes": "Uses 24px outlined icon instead of Nova's 20px filled icon. Badge position is top-right vs Nova's top-left. Not synced to library — custom implementation."
+  },
+  {
+    "id": "hrz-table-001",
+    "name": "DataTable",
+    "file_id": "jkl012",
+    "file_name": "Horizon Product UI",
+    "team": "Team Horizon",
+    "description": "Horizon's data table — pulled from Nova library but not resynced since Nova updated hover state on 2026-05-27.",
+    "status": "approved",
+    "last_modified": "2026-05-01T10:00:00Z",
+    "variants": ["default", "compact"],
+    "used_by_teams": [],
+    "is_library_component": false,
+    "diverges_from_library": true,
+    "divergence_notes": "Out of sync — Nova updated row hover to blue-50 on 2026-05-27. This file still uses gray-100 hover."
+  }
+]

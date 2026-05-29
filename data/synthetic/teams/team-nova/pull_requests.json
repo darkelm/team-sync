@@ -1,0 +1,18 @@
+[
+  {
+    "id": "NOVA-PR-31",
+    "title": "feat: DataTable row hover state update",
+    "description": "Updates row hover from gray-100 to blue-50. Published to design system library. Atlas and Horizon DataTable implementations need to resync from library.",
+    "status": "merged",
+    "author": "ben.nakamura",
+    "team": "Team Nova",
+    "base_branch": "main",
+    "head_branch": "feat/datatable-hover",
+    "files_changed": ["packages/design-system/src/DataTable/DataTable.tsx", "packages/design-system/src/DataTable/DataTable.css"],
+    "components_touched": ["design-system"],
+    "created_at": "2026-05-25T09:00:00Z",
+    "merged_at": "2026-05-27T16:00:00Z",
+    "linked_tickets": ["NOVA-402"],
+    "cross_team_impact": ["Team Atlas", "Team Horizon"]
+  }
+]

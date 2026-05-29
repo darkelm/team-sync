@@ -1,0 +1,17 @@
+[
+  {
+    "id": "atl-table-001",
+    "name": "DataTable",
+    "file_id": "def456",
+    "file_name": "Atlas Data Dashboards",
+    "team": "Team Atlas",
+    "description": "Atlas dashboard data table. Pulled from Nova library — not resynced since Nova's May 27 hover state update.",
+    "status": "approved",
+    "last_modified": "2026-05-05T10:00:00Z",
+    "variants": ["default", "compact", "striped"],
+    "used_by_teams": [],
+    "is_library_component": false,
+    "diverges_from_library": true,
+    "divergence_notes": "Out of sync — Nova updated DataTable row hover to blue-50 on 2026-05-27. This file still shows gray-100 hover state."
+  }
+]

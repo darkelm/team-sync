@@ -1,0 +1,53 @@
+[
+  {
+    "id": "FRG-501",
+    "title": "Implement API gateway v2 config schema",
+    "description": "Forge manages the gateway config. Atlas is planning their own gateway migration (ATL-201) for the same quarter with no joint plan. Risk of conflicting changes to the same infrastructure.",
+    "status": "todo",
+    "priority": "high",
+    "assignee": "Chris Park",
+    "team": "Team Forge",
+    "labels": ["api-gateway", "infrastructure", "q3", "conflict-risk"],
+    "due_date": "2026-07-30",
+    "created_at": "2026-05-05T09:00:00Z",
+    "updated_at": "2026-05-20T10:00:00Z",
+    "linked_tickets": ["ATL-201"],
+    "components": ["api-gateway-config", "ci-pipeline"],
+    "epic": "Platform v2",
+    "planned_quarter": "Q3-2026"
+  },
+  {
+    "id": "FRG-502",
+    "title": "Launch developer portal v2",
+    "description": "Self-service onboarding, team catalog, runbook search. Uses Nova design system but StatusIndicator was built custom — not aligned with Nova's Badge component.",
+    "status": "in_progress",
+    "priority": "medium",
+    "assignee": "Nia Thompson",
+    "team": "Team Forge",
+    "labels": ["developer-portal", "design-system"],
+    "due_date": "2026-06-30",
+    "created_at": "2026-04-15T09:00:00Z",
+    "updated_at": "2026-05-25T14:00:00Z",
+    "linked_tickets": [],
+    "components": ["developer-portal"],
+    "epic": "Platform v2",
+    "planned_quarter": "Q2-2026"
+  },
+  {
+    "id": "FRG-503",
+    "title": "Migrate all teams to new deployment pipeline",
+    "description": "New pipeline requires teams to update their CI config. Phoenix and Horizon have not started migration yet.",
+    "status": "in_progress",
+    "priority": "high",
+    "assignee": "Chris Park",
+    "team": "Team Forge",
+    "labels": ["ci-cd", "migration", "cross-team"],
+    "due_date": "2026-06-30",
+    "created_at": "2026-04-01T09:00:00Z",
+    "updated_at": "2026-05-28T09:00:00Z",
+    "linked_tickets": [],
+    "components": ["ci-pipeline", "deploy-service"],
+    "epic": "Platform v2",
+    "planned_quarter": "Q2-2026"
+  }
+]

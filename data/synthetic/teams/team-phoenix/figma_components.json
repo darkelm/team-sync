@@ -1,0 +1,17 @@
+[
+  {
+    "id": "phx-modal-001",
+    "name": "AuthModal",
+    "file_id": "abc123",
+    "file_name": "Phoenix Auth Flows",
+    "team": "Team Phoenix",
+    "description": "In-app authentication modal. Uses Nova Modal component as base but has custom header styling.",
+    "status": "dev_ready",
+    "last_modified": "2026-04-20T10:00:00Z",
+    "variants": ["session-expired", "re-auth", "mfa"],
+    "used_by_teams": ["Team Horizon"],
+    "is_library_component": false,
+    "diverges_from_library": false,
+    "divergence_notes": null
+  }
+]

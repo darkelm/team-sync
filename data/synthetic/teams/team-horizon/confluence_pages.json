@@ -1,0 +1,26 @@
+[
+  {
+    "id": "HRZ-DOC-001",
+    "title": "Decision: Local Button Component Override",
+    "space": "HORIZON",
+    "team": "Team Horizon",
+    "content_summary": "Decision to implement local Button override in February 2026. Nova's Button did not support icon-only variant needed for dashboard toolbar. Now outdated — Nova shipped icon support in March. Local override should be removed.",
+    "tags": ["decision-log", "design-system", "button", "tech-debt"],
+    "last_updated": "2026-02-10",
+    "author": "Jamal Foster",
+    "url": "https://confluence.acme.co/wiki/HORIZON/decisions/local-button",
+    "decision_log": {
+      "id": "DEC-HRZ-001",
+      "title": "Implement local Button override for icon-only variant",
+      "decision": "Build local Button until Nova ships icon-only support. Remove override once Nova ships the variant.",
+      "rationale": "Dashboard toolbar required icon-only buttons. Nova Button did not support this. Blocked on Nova roadmap.",
+      "alternatives_considered": ["Wait for Nova to ship the variant (estimated 2 months)", "Use a div with onclick"],
+      "decided_by": ["Tyler Brooks", "Jamal Foster"],
+      "date": "2026-02-10",
+      "status": "superseded",
+      "related_tickets": ["HRZ-310"],
+      "related_components": ["button", "Button"],
+      "team": "Team Horizon"
+    }
+  }
+]

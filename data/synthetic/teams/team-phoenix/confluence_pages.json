@@ -1,0 +1,38 @@
+[
+  {
+    "id": "PHX-DOC-001",
+    "title": "Decision: OAuth 2.0 PKCE Migration",
+    "space": "PHOENIX",
+    "team": "Team Phoenix",
+    "content_summary": "Decision to migrate from implicit OAuth flow to PKCE. Driven by security audit findings in Q1. All new integrations must use PKCE. Existing integrations have 90-day sunset.",
+    "tags": ["decision-log", "oauth", "security"],
+    "last_updated": "2026-04-05",
+    "author": "Sarah Chen",
+    "url": "https://confluence.acme.co/wiki/PHOENIX/decisions/oauth-pkce",
+    "decision_log": {
+      "id": "DEC-PHX-001",
+      "title": "Adopt OAuth 2.0 PKCE for all auth flows",
+      "decision": "Migrate all OAuth integrations to PKCE flow. Implicit flow deprecated as of 2026-07-01.",
+      "rationale": "Security audit identified implicit flow as vulnerable to token interception. PKCE eliminates this attack vector.",
+      "alternatives_considered": ["Keep implicit flow with additional mitigations", "Move to client credentials only"],
+      "decided_by": ["Sarah Chen", "Marcus Webb", "Jordan Kim"],
+      "date": "2026-04-05",
+      "status": "approved",
+      "related_tickets": ["PHX-101", "ATL-205"],
+      "related_components": ["auth", "token-manager", "login"],
+      "team": "Team Phoenix"
+    }
+  },
+  {
+    "id": "PHX-DOC-002",
+    "title": "Token Expiry Compliance Change — NO DECISION LOG",
+    "space": "PHOENIX",
+    "team": "Team Phoenix",
+    "content_summary": "Working notes on reducing token TTL from 72h to 24h. Compliance requirement from legal. Horizon must update their token storage. Decision has not been formally logged.",
+    "tags": ["compliance", "tokens", "wip"],
+    "last_updated": "2026-05-20",
+    "author": "Sarah Chen",
+    "url": "https://confluence.acme.co/wiki/PHOENIX/notes/token-expiry-compliance",
+    "decision_log": null
+  }
+]
