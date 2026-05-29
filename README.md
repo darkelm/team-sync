@@ -11,6 +11,8 @@ Built to prove out with synthetic data first, then swap in real integrations via
 - **[VS-COPILOT.md](VS-COPILOT.md)** — how this differs from Copilot / Claude-in-Slack / ChatGPT connectors (the most-asked question)
 - **[ADOPTION.md](ADOPTION.md)** — the plan to remove pilot barriers (manifest builder, freshness, NLU, fatigue, hosting)
 - **[DEPLOY.md](DEPLOY.md)** — cloud deployment (Railway/Render/Fly)
+- **[SPECS.md](SPECS.md)** — detailed implementation specs for all remaining work
+- **[DEMO.md](DEMO.md)** — live demo cheat sheet
 
 > How they fit: README is the *what*, ADOPTION is the *how people start*. The Manifest Builder (ADOPTION Phase 1) is the on-ramp to **Layer 1 — Foundation** below; everything else builds on it.
 
