@@ -1,0 +1,12 @@
+Jordan Kim: Thanks for joining the Atlas–Horizon sync. Main topic: the real-time pipeline cutover.
+Tyler Brooks: Right. Horizon's notification feed still polls every 60 seconds. We need to move to the event stream.
+Jordan Kim: We decided to cut Horizon over to the Kafka event stream in Q3, after Atlas ships pipeline v2.
+Raj Patel: One risk — the event payload shape is changing, so Horizon's current parser will break on day one if we don't coordinate the schema.
+Tyler Brooks: Agreed, that's the thing that worries me most. Let's lock the schema first.
+Jordan Kim: Decision: Atlas will publish a frozen event schema by June 20 so Horizon can build against it.
+Mei Lin: I'll update the Horizon notification consumer to the new schema once it's published. I can have that done by July 10.
+Jordan Kim: Action item: Raj, can you draft the schema doc and circulate it to Horizon this week?
+Raj Patel: Yes, I'll get the schema draft out by Friday.
+Tyler Brooks: There's also a dependency on Team Phoenix — the new feed needs the updated auth token format. We should loop them in.
+Jordan Kim: Good catch. Let's standardize on the v2 event envelope across both teams so we're not maintaining two formats.
+Tyler Brooks: Last thing — this is blocked until Atlas finalizes the gateway routing, which is still in flight.
