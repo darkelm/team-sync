@@ -20,11 +20,22 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from src.providers.factory import Providers
 from src.agent.detector import DriftDetector
 from src.agent.digest import DigestGenerator
+from src.agent.briefing import BriefingGenerator
+from src.agent.scheduler import DigestScheduler
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
 providers = Providers("config.yaml")
 detector = DriftDetector(providers)
 digest_gen = DigestGenerator(providers)
+briefing_gen = BriefingGenerator(providers)
+
+
+def _match_teams(text: str) -> list[str]:
+    """Return the names of all known teams mentioned in the text, in order of appearance."""
+    q = text.lower()
+    found = [(q.index(t.team.lower()), t.team) for t in providers.manifests.get_all_teams()
+             if t.team.lower() in q]
+    return [name for _, name in sorted(found)]
 
 
 def strip_mention(text: str) -> str:
@@ -80,6 +91,32 @@ def handle_query(text: str) -> str:
                 f"<{p.url}|View in Confluence>"
             )
         return "\n\n".join(lines)
+
+    # Cross-team meeting briefing
+    if any(w in q for w in ["prep", "brief", "briefing", "meeting", "sync with", "agenda"]):
+        team_names = _match_teams(text)
+        if len(team_names) >= 2:
+            return briefing_gen.cross_team_briefing(team_names)
+        return ("For a cross-team briefing, name at least two teams. "
+                "Try: `@syncbot prep me for a sync with Team Atlas and Team Forge`")
+
+    # Predicted / future conflicts
+    if any(w in q for w in ["predict", "predicted", "future conflict", "upcoming conflict", "collision", "before they"]):
+        predictions = detector.predict_conflicts()
+        if not predictions:
+            return "No conflicts predicted across planned work. 🎉"
+        lines = [f"*🔮 {len(predictions)} predicted conflict(s):*\n"]
+        for c in predictions:
+            emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "⚪"}.get(c.severity.value, "•")
+            lines.append(f"{emoji} *{c.title}*\n   Teams: {', '.join(c.teams_involved)}\n"
+                         f"   Tickets: {', '.join(c.tickets_involved)}\n   → {c.suggested_action}")
+        return "\n".join(lines)
+
+    # Post digests to all team channels on demand
+    if any(w in q for w in ["post digest", "send digest", "digest all", "post all", "broadcast"]):
+        teams = providers.manifests.get_all_teams()
+        digest_gen.post_all_digests()
+        return f"Posted weekly digests to {len(teams)} team channels."
 
     # Scan / conflicts
     if any(w in q for w in ["scan", "conflict", "issues", "what's broken", "whats broken", "problems"]):
@@ -174,10 +211,13 @@ def handle_query(text: str) -> str:
         "• `@syncbot who owns <component>` — find component owner\n"
         "• `@syncbot when does <team> ship` — upcoming deliverables\n"
         "• `@syncbot what was decided about <topic>` — search decision logs\n"
-        "• `@syncbot scan for conflicts` — drift and conflict report\n"
+        "• `@syncbot scan for conflicts` — current drift and conflict report\n"
+        "• `@syncbot predict conflicts` — forecast collisions in planned work\n"
+        "• `@syncbot prep me for a sync with <team> and <team>` — meeting briefing\n"
         "• `@syncbot get me up to speed on <team>` — team briefing\n"
         "• `@syncbot is <team>'s design in sync` — Figma drift check\n"
-        "• `@syncbot digest for <team>` — weekly digest\n"
+        "• `@syncbot digest for <team>` — weekly digest preview\n"
+        "• `@syncbot post digests` — send digests to all team channels now\n"
         "• `@syncbot dependencies for <team>` — dependency map"
     )
 
@@ -201,5 +241,10 @@ def handle_dm(event, say):
 if __name__ == "__main__":
     print("SyncBot starting (Socket Mode)...")
     print(f"Providers: Jira={os.getenv('JIRA_PROVIDER','local')} | Confluence={os.getenv('CONFLUENCE_PROVIDER','local')} | Slack=live")
+
+    # Start the proactive weekly-digest scheduler in the background
+    digest_scheduler = DigestScheduler(providers, "config.yaml")
+    digest_scheduler.start()
+
     handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     handler.start()

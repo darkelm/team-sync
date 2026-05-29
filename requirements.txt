@@ -8,3 +8,4 @@ python-dotenv>=1.0
 slack-sdk>=3.27
 slack-bolt>=1.18
 networkx>=3.0
+apscheduler>=3.10

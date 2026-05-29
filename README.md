@@ -154,14 +154,16 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] Claude agent query layer: 7 tools wired, full agentic loop
 - [x] Slack manifest ready to paste in
 - [x] Pushed to GitHub: [darkelm/team-sync](https://github.com/darkelm/team-sync)
+- [x] Slack bot — LIVE and responding (`@syncbot scan for conflicts` works in workspace PrototypeToolsPilot)
+- [x] Live Jira + Confluence providers hardened for empty/restricted instances
+- [x] Cloud deployment config ready (Railway/Render/Fly — see DEPLOY.md)
 
 ### Next
-- [ ] Slack bot — activate live posting (token needed)
+- [ ] **Deploy to Railway** — bot currently only runs while a local terminal session is alive; deploy as a background worker for 24/7 uptime (config + guide ready in DEPLOY.md, needs browser steps + rotated tokens)
 - [ ] GitHub live provider — activate (PAT needed)
 - [ ] Figma live provider — activate (access token needed)
-- [ ] Claude agent — activate conversational layer (Anthropic API key needed)
-- [ ] Slack bot event listener — respond to `@syncbot` mentions in real channels
-- [ ] Real Jira/Confluence data — create real team manifests pointing at actual projects
+- [ ] Claude agent — activate conversational layer (Anthropic API key needed) for freeform natural-language queries
+- [ ] Real Jira/Confluence data — create real team manifests pointing at actual GAPTT/GAPTS projects
 - [ ] Scheduled digest — run automatically every Monday morning
 - [ ] GitHub PR webhook — trigger dependency alert on merge
 

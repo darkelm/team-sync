@@ -3,8 +3,8 @@
 # Nothing else in the codebase needs to change.
 
 providers:
-  jira: live
-  confluence: live
+  jira: local
+  confluence: local
   github: local
   slack: live
   figma: local
