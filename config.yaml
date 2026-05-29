@@ -6,7 +6,7 @@ providers:
   jira: live
   confluence: live
   github: local
-  slack: local
+  slack: live
   figma: local
 
 data:
