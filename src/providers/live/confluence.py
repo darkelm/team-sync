@@ -32,20 +32,29 @@ class LiveConfluenceProvider(ConfluenceProvider):
         )
 
     def get_pages(self, space: Optional[str] = None, team: Optional[str] = None) -> list[ConfluencePage]:
-        params = {"expand": "version,metadata.labels,space", "limit": 50}
-        if space:
-            params["spaceKey"] = space
-        data = self._get("/content", params)
-        return [self._to_page(p, team or "") for p in data.get("results", [])]
+        try:
+            params = {"expand": "version,metadata.labels,space", "limit": 50}
+            if space:
+                params["spaceKey"] = space
+            data = self._get("/content", params)
+            return [self._to_page(p, team or "") for p in data.get("results", [])]
+        except Exception:
+            return []
 
     def search_pages(self, query: str, team: Optional[str] = None) -> list[ConfluencePage]:
-        cql = f'type=page AND text~"{query}"'
-        data = self._get("/search", {"cql": cql, "expand": "version,metadata.labels,space", "limit": 20})
-        return [self._to_page(p, team or "") for p in data.get("results", [])]
+        try:
+            cql = f'type=page AND text~"{query}"'
+            data = self._get("/search", {"cql": cql, "expand": "version,metadata.labels,space", "limit": 20})
+            return [self._to_page(p, team or "") for p in data.get("results", [])]
+        except Exception:
+            return []
 
     def get_decision_logs(self, team: Optional[str] = None, component: Optional[str] = None) -> list[ConfluencePage]:
-        query = f'label="decision-log"'
-        if component:
-            query += f' AND text~"{component}"'
-        data = self._get("/search", {"cql": query, "expand": "version,metadata.labels,space", "limit": 20})
-        return [self._to_page(p, team or "") for p in data.get("results", [])]
+        try:
+            query = 'label="decision-log"'
+            if component:
+                query += f' AND text~"{component}"'
+            data = self._get("/search", {"cql": query, "expand": "version,metadata.labels,space", "limit": 20})
+            return [self._to_page(p, team or "") for p in data.get("results", [])]
+        except Exception:
+            return []

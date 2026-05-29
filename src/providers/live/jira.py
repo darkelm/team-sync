@@ -35,20 +35,28 @@ class LiveJiraProvider(JiraProvider):
             components=[c["name"] for c in fields.get("components", [])],
         )
 
+    def _search(self, jql: str, max_results: int = 100) -> list[Ticket]:
+        try:
+            data = self._get("/search", {"jql": jql, "maxResults": max_results})
+            return [self._to_ticket(i) for i in data.get("issues", [])]
+        except Exception:
+            return []
+
     def get_tickets(self, team: Optional[str] = None, status: Optional[str] = None) -> list[Ticket]:
-        jql = f'project = "{team}"' if team else "order by updated DESC"
+        jql = f'project = "{team}"' if team else 'order by updated DESC'
         if status:
             jql += f' AND status = "{status}"'
-        data = self._get("/search", {"jql": jql, "maxResults": 100})
-        return [self._to_ticket(i) for i in data.get("issues", [])]
+        return self._search(jql)
 
     def get_ticket(self, ticket_id: str) -> Optional[Ticket]:
-        data = self._get(f"/issue/{ticket_id}")
-        return self._to_ticket(data)
+        try:
+            data = self._get(f"/issue/{ticket_id}")
+            return self._to_ticket(data)
+        except Exception:
+            return None
 
     def get_tickets_by_component(self, component: str) -> list[Ticket]:
-        data = self._get("/search", {"jql": f'component = "{component}"', "maxResults": 50})
-        return [self._to_ticket(i) for i in data.get("issues", [])]
+        return self._search(f'component = "{component}"', max_results=50)
 
     def get_upcoming_deliverables(self, team: str) -> list[Ticket]:
         jql = f'project = "{team}" AND status in ("To Do", "In Progress", "In Review") AND dueDate is not EMPTY ORDER BY dueDate ASC'
