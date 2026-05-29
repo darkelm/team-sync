@@ -66,11 +66,11 @@ Each adapter extracts candidate manifest fields *with provenance and confidence*
 
 ---
 
-## Phase 2 — Living manifests (kills barrier #2, staleness)
+## Phase 2 — Living manifests (kills barrier #2, staleness) ✅ BUILT
 
-- **Scheduled re-sync:** re-run available adapters nightly/weekly; **diff against the current manifest**; propose updates ("3 new components in `src/`; owner of `billing` shifted based on recent commits").
-- **Manifest drift detection:** flag manifests that diverge from reality (repo has a component the manifest doesn't; a listed owner has no recent activity).
-- **Freshness metadata:** every manifest records `last_verified`; answers state their age ("as of last sync 2 days ago").
+- **Manifest drift detection:** `syncbot refresh-manifest <sources> --team X` re-scans and diffs reality against the manifest — new/removed components, owner changes (only when an explicit source disagrees), new members, newly-implied dependencies — each with provenance.
+- **Freshness metadata:** `last_verified` on every manifest; `syncbot validate` flags manifests never verified or older than 30 days.
+- **Next:** wire refresh into the scheduler for automatic nightly re-scan + a "manifest drift" line in the weekly digest.
 
 ---
 

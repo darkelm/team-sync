@@ -95,6 +95,7 @@ class TeamManifest(BaseModel):
     roadmap_link: Optional[str] = None
     quarter_goals: list[str] = Field(default_factory=list)
     resources: list[Resource] = Field(default_factory=list)
+    last_verified: Optional[date] = None
 
 
 # ── Jira ─────────────────────────────────────────────────────────────────────

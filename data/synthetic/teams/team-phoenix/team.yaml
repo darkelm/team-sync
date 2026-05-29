@@ -56,3 +56,4 @@ quarter_goals:
   - Ship OAuth 2.0 PKCE flow by end of Q2
   - Migrate session storage from Redis to Postgres
   - Audit all token expiry logic for compliance
+last_verified: 2026-05-29

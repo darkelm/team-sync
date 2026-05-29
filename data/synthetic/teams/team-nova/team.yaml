@@ -75,3 +75,4 @@ resources:
     type: repo
     url: https://github.com/acme/design-tokens
     description: Source of truth for color, spacing, typography tokens across all platforms
+last_verified: 2026-05-29

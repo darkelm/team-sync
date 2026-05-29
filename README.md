@@ -180,6 +180,7 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 
 - [x] **Meeting-transcript ingestion** — parses VTT/SRT/TXT, extracts decisions/action items/cross-team flags/risks; decisions become searchable (closes the "decided verbally, lost forever" gap)
 - [x] **Multi-Source Manifest Builder** (ADOPTION Phase 1) — fuses repo/git/CODEOWNERS/roster/Jira/transcript into a provenance-annotated draft `team.yaml`; kills the cold-start barrier
+- [x] **Living manifests** (ADOPTION Phase 2) — `refresh-manifest` diffs reality vs manifest and proposes updates; `last_verified` freshness stamps; staleness flagged in `validate`
 
 ### Next
 - [ ] **Claude agent** — natural-language understanding (needs Anthropic API key; replaces keyword matching — highest-leverage upgrade; also unlocks semantic duplicate-work detection AND far better transcript extraction)

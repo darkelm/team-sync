@@ -33,6 +33,9 @@ def validate(
     console.print(f"\n[bold]Found {len(teams)} team manifests[/bold]\n")
 
     all_valid = True
+    from datetime import date, timedelta
+    stale_after = date.today() - timedelta(days=30)
+
     for team in teams:
         issues = []
         if not team.slack_channel:
@@ -43,6 +46,10 @@ def validate(
             issues.append("No components defined")
         if not team.quarter_goals:
             issues.append("No quarter_goals defined")
+        if team.last_verified is None:
+            issues.append("Never verified — run `syncbot refresh-manifest`")
+        elif team.last_verified < stale_after:
+            issues.append(f"Stale — last verified {team.last_verified} (>30 days ago)")
 
         if issues:
             all_valid = False
@@ -364,6 +371,55 @@ def build_manifest(
     else:
         console.print("")
         print(result.yaml_text)
+
+
+@app.command("refresh-manifest", help="Diff a team's manifest against fresh source scans and propose updates.")
+def refresh_manifest(
+    sources: list[str] = typer.Argument(..., help="Same sources you'd build from (repo, CSV, transcript…)."),
+    team: str = typer.Option(..., "--team", "-t", help="Team name (must already have a manifest)."),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """Show what's changed in reality since the manifest was written."""
+    import yaml
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.builder.refresher import ManifestRefresher
+
+    providers = _get_providers(config)
+    manifest = providers.manifests.get_team(team)
+    if not manifest:
+        console.print(f"[red]No existing manifest for '{team}'. Use `build-manifest` first.[/red]")
+        raise typer.Exit(1)
+
+    current = json.loads(manifest.model_dump_json())
+    known = [t.team for t in providers.manifests.get_all_teams()]
+    diff = ManifestRefresher(manifest.team, known_teams=known).diff(current, list(sources))
+
+    console.print(f"\n[bold]Manifest refresh — {manifest.team}[/bold] "
+                  f"[dim](sources: {', '.join(diff.sources_used) or 'none'})[/dim]\n")
+    if not diff.has_changes:
+        console.print("[green]✓ Manifest still matches reality. Nothing to update.[/green]")
+        return
+
+    if diff.owner_change:
+        old, new, note = diff.owner_change
+        console.print(f"[yellow]Owner change:[/yellow] {old} → [bold]{new}[/bold]  [dim]{note}[/dim]")
+    if diff.components_added:
+        console.print("\n[green]Components to add:[/green]")
+        for name, note in diff.components_added:
+            console.print(f"  + {name}  [dim]{note}[/dim]")
+    if diff.components_removed:
+        console.print("\n[red]Components in manifest but not found in sources (verify if removed):[/red]")
+        for name in diff.components_removed:
+            console.print(f"  - {name}")
+    if diff.members_added:
+        console.print("\n[green]People to add:[/green]")
+        for name, note in diff.members_added:
+            console.print(f"  + {name}  [dim]{note}[/dim]")
+    if diff.dependencies_added:
+        console.print("\n[green]Possible new dependencies:[/green]")
+        for tm, note in diff.dependencies_added:
+            console.print(f"  + {tm}  [dim]{note}[/dim]")
+    console.print("\n[dim]Review and apply the changes you confirm, then bump last_verified.[/dim]")
 
 
 if __name__ == "__main__":
