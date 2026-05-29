@@ -30,7 +30,18 @@ class DigestScheduler:
     def _run_digests(self):
         print("[scheduler] Posting weekly digests to all team channels...", flush=True)
         self.generator.post_all_digests()
+        self._run_exec_digest()
         print("[scheduler] Done.", flush=True)
+
+    def _run_exec_digest(self):
+        """Post the leadership portfolio rollup to the configured exec channel, if any."""
+        exec_channel = self.config.get("leadership", {}).get("exec_channel", "")
+        if not exec_channel:
+            return
+        from .health import HealthAssessor
+        text = HealthAssessor(self.providers).format_portfolio()
+        self.providers.slack.post_digest(exec_channel, text)
+        print(f"[scheduler] Posted exec rollup to {exec_channel}.", flush=True)
 
     def start(self):
         cron_expr = self.config.get("digest", {}).get("schedule", "0 9 * * 1")

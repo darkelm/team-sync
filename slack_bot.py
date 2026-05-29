@@ -49,17 +49,28 @@ if os.environ.get("ANTHROPIC_API_KEY"):
         print(f"[agent] Claude agent unavailable, using keyword mode: {e}", flush=True)
 
 
-def answer(text: str) -> str:
-    """Route a question through the Claude agent when available, else keyword matching."""
+from src.agent.audience import AudienceStore, agent_hint, is_non_technical, parse_role_command
+from src.agent.plain import plainify
+
+audience = AudienceStore()
+
+
+def answer(text: str, role: str = "ic") -> str:
+    """Answer a question, framed for the audience's role (data is identical; framing differs)."""
+    reply = None
     if AGENT is not None:
         try:
             AGENT.reset()
-            reply = AGENT.ask(text)
-            if reply:
-                return reply
+            hint = agent_hint(role)
+            reply = AGENT.ask(f"{hint}\n\n{text}" if hint else text)
         except Exception as e:
             print(f"[agent] error, falling back to keywords: {e}", flush=True)
-    return handle_query(text)
+    if not reply:
+        reply = handle_query(text)
+    # De-jargon for non-technical audiences (keyword path; the agent already got the hint).
+    if is_non_technical(role) and AGENT is None:
+        reply = plainify(reply)
+    return reply
 
 
 def _match_teams(text: str) -> list[str]:
@@ -430,6 +441,14 @@ INTRO = (
 BOT_USER_ID = None
 
 
+def _handle_role_command(text: str, event) -> str | None:
+    """If the user is setting their role, record it and return a confirmation."""
+    role = parse_role_command(text)
+    if role and event.get("user"):
+        return audience.set_user(event["user"], role)
+    return None
+
+
 @app.event("app_mention")
 def handle_mention(event, say):
     # Reply in-thread to keep channels tidy.
@@ -438,7 +457,12 @@ def handle_mention(event, say):
     if not text:
         say(handle_query("help"), thread_ts=thread_ts)
         return
-    say(answer(text), thread_ts=thread_ts)
+    role_msg = _handle_role_command(text, event)
+    if role_msg:
+        say(role_msg, thread_ts=thread_ts)
+        return
+    role = audience.role_for(event.get("user", ""), event.get("channel", ""))
+    say(answer(text, role), thread_ts=thread_ts)
 
 
 def _ingest_slack_files(event) -> str:
@@ -474,7 +498,13 @@ def handle_dm(event, say):
         say(_ingest_slack_files(event), thread_ts=event.get("ts"))
         return
     if event.get("channel_type") == "im":
-        say(answer(event.get("text", "")), thread_ts=event.get("thread_ts"))
+        text = event.get("text", "")
+        role_msg = _handle_role_command(text, event)
+        if role_msg:
+            say(role_msg, thread_ts=event.get("thread_ts"))
+            return
+        role = audience.role_for(event.get("user", ""), event.get("channel", ""))
+        say(answer(text, role), thread_ts=event.get("thread_ts"))
 
 
 @app.event("member_joined_channel")

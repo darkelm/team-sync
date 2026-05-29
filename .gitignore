@@ -8,3 +8,4 @@ dist/
 .ruff_cache/
 data/notification_prefs.json
 data/health_snapshots.json
+data/audience_prefs.json

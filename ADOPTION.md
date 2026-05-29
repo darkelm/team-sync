@@ -131,9 +131,13 @@ The strategic capstone, and the concrete delivery of the original cross-platform
 
 ---
 
-## Phase 7 — Audience-aware experience: serve leadership, friendly for everyone ◑ STARTED
+## Phase 7 — Audience-aware experience: serve leadership, friendly for everyone ✅ BUILT (dashboard intentionally out of scope)
 
-**Built:** the leadership rollup (7.B) + plain-language layer (7.C). `src/agent/health.py` assesses each team as 🟢/🟡/🔴 from signals we already compute (critical/high issues, predicted conflicts, overdue/at-risk deliverables, missing decision records, design inconsistencies, stale profiles), with top-3 plain-language risks, week-over-week trajectory, and who to talk to — **no per-component noise**. Surfaces: `@syncbot how's <team> doing?`, `@syncbot portfolio status`, plus `team_health`/`portfolio_status` as agent + MCP tools. Terminology is configurable (`config.yaml → leadership`) for engagement/workstream vs product-area/squad. `src/agent/plain.py` de-jargons output for non-technical readers. **Next within Phase 7:** full per-user audience routing (7.A) so *every* answer auto-frames by role, the weekly exec digest to a configured channel, and the optional web dashboard (7.D).
+- **7.A Audience auto-routing** ✅ — `src/agent/audience.py`: per-user role (with per-channel defaults), set via `@syncbot I'm a designer` / `set my role to MD`. Every answer auto-frames by role — non-technical roles get de-jargoned output; the Claude agent gets an audience hint so it leads with the right things (health/risk for leadership, design language for designers). Default "ic" = no behavior change.
+- **7.B Leadership rollup** ✅ — `src/agent/health.py` assesses each team 🟢/🟡/🔴 from signals we already compute, with top-3 plain-language risks, week-over-week trajectory, and who to talk to. No per-component noise. Surfaces: `how's <team> doing?`, `portfolio status`, plus `team_health`/`portfolio_status` as agent + MCP tools. Terminology configurable (`config.yaml → leadership`).
+- **7.B (proactive) Weekly exec digest** ✅ — the scheduler posts the portfolio rollup to `leadership.exec_channel` every Monday alongside the team digests (skipped if unset).
+- **7.C Plain language** ✅ — `src/agent/plain.py` de-jargons output for non-technical readers.
+- **7.D Web dashboard** — intentionally **out of scope** (leadership is served via Slack + MCP).
 
 ---
 
@@ -198,7 +202,7 @@ Phase 4    Notification tuning ..... keeps the proactive value alive
            + Batch API ............. cheap scheduled AI at scale
 Phase 5    Deploy + no-terminal .... makes it production-real                ◑
 Phase 6    MCP server .............. supercharge any AI; portability unlock   ✅
-Phase 7    Audience-aware .......... serve leadership; friendly for everyone  ⬜ (planned)
+Phase 7    Audience-aware .......... serve leadership; friendly for everyone  ✅ (no dashboard)
 ```
 
 Phases 1–4, 6 done; 3.5 done; 5 = no-terminal done + Railway is yours. **Phase 7 is the next build** — the leadership rollup (7.B) is the biggest remaining value gap, with a thin audience flag (7.A) and the plain-language layer (7.C). All preserve the AI-optional + channel-neutral discipline.
