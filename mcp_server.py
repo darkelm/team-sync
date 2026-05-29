@@ -109,5 +109,12 @@ def cross_team_briefing(teams: list[str]) -> str:
     return _run("cross_team_briefing", teams=teams)
 
 
+@mcp.tool()
+def import_export(path: str, team: str) -> str:
+    """Import an export into a team — Jira CSV, Confluence export folder, git clone, or meeting transcript. Auto-detects the type. `path` is a local path the server can read."""
+    from src.ingest import ingest_path
+    return ingest_path(path, team)
+
+
 if __name__ == "__main__":
     mcp.run()

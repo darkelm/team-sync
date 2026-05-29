@@ -427,9 +427,39 @@ def handle_mention(event, say):
     say(answer(text), thread_ts=thread_ts)
 
 
+def _ingest_slack_files(event) -> str:
+    """No-terminal import: download attached files and run them through the channel-neutral core."""
+    import httpx
+    from src.ingest import ingest_upload
+    files = event.get("files") or []
+    teams = _match_teams(event.get("text", ""))
+    if not teams:
+        return ("Attach the export *and* name the team — e.g. send the file with "
+                "the message _\"import for Team Phoenix\"_.")
+    team = teams[0]
+    token = os.environ["SLACK_BOT_TOKEN"]
+    results = []
+    for f in files:
+        name = f.get("name", "upload")
+        url = f.get("url_private_download") or f.get("url_private")
+        try:
+            r = httpx.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=True)
+            r.raise_for_status()
+            results.append(ingest_upload(name, r.content, team))
+        except Exception as e:
+            results.append(f"Couldn't import {name}: {e} (the bot may need the `files:read` scope).")
+    return "\n".join(results)
+
+
 @app.event("message")
 def handle_dm(event, say):
-    if event.get("channel_type") == "im" and not event.get("bot_id"):
+    if event.get("bot_id"):
+        return
+    # No-terminal import: a file attached in a DM (or any channel the bot sees)
+    if event.get("files"):
+        say(_ingest_slack_files(event), thread_ts=event.get("ts"))
+        return
+    if event.get("channel_type") == "im":
         say(answer(event.get("text", "")), thread_ts=event.get("thread_ts"))
 
 

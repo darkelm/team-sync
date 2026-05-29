@@ -220,103 +220,36 @@ def _slugify(team: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", team.lower()).strip("-")
 
 
-def _detect_source(path: str) -> str:
-    """Figure out what kind of export this is from the path itself."""
-    import os
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    from src.importers.transcript import looks_like_transcript
-    if os.path.isfile(path):
-        if looks_like_transcript(path):
-            return "transcript"
-        if path.lower().endswith(".csv"):
-            return "jira"
-    if os.path.isdir(path):
-        if os.path.isdir(os.path.join(path, ".git")):
-            return "github"
-        for root, _, files in os.walk(path):
-            if any(f.lower().endswith((".md", ".markdown", ".html", ".htm")) for f in files):
-                return "confluence"
-    return "unknown"
-
-
-def _do_import(source: str, path: str, team: str, config: str):
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    from src.importers.writer import write_team_json
-    slug = _slugify(team)
-    teams_dir = _teams_dir(config)
-
-    if source == "jira":
-        from src.importers.jira_csv import import_jira_csv
-        tickets = import_jira_csv(path, team)
-        out = write_team_json(tickets, teams_dir, slug, "jira_tickets.json")
-        console.print(f"[green]✓[/green] {len(tickets)} Jira tickets → {out}")
-    elif source == "confluence":
-        from src.importers.confluence_export import import_confluence_export
-        pages = import_confluence_export(path, team)
-        decisions = sum(1 for p in pages if p.decision_log)
-        out = write_team_json(pages, teams_dir, slug, "confluence_pages.json")
-        console.print(f"[green]✓[/green] {len(pages)} Confluence pages ({decisions} decision logs) → {out}")
-    elif source == "github":
-        from src.importers.github_clone import import_github_clone
-        manifest = _get_providers(config).manifests.get_team(team)
-        component_paths = {c.name: c.path for c in manifest.components.code} if manifest else {}
-        prs = import_github_clone(path, team, component_paths)
-        out = write_team_json(prs, teams_dir, slug, "pull_requests.json")
-        console.print(f"[green]✓[/green] {len(prs)} merged PRs → {out}")
-    elif source == "transcript":
-        import os, json
-        from src.importers.transcript import parse_transcript
-        from src.agent.meeting import MeetingAnalyzer
-        segments = parse_transcript(path)
-        title = os.path.splitext(os.path.basename(path))[0].replace("-", " ").replace("_", " ").title()
-        analyzer = MeetingAnalyzer(_get_providers(config))
-        notes = analyzer.analyze(segments, team, title)
-        # Persist meeting notes + searchable decision logs
-        os.makedirs(os.path.join(teams_dir, slug), exist_ok=True)
-        with open(os.path.join(teams_dir, slug, "meeting_decisions.json"), "w") as f:
-            json.dump(analyzer.to_confluence_pages(notes), f, indent=2, default=str)
-        write_team_json([notes], teams_dir, slug, "meeting_notes.json")
-        console.print(f"[green]✓[/green] Meeting analyzed: {len(notes.decisions)} decisions, "
-                      f"{len(notes.action_items)} action items, {len(notes.risks)} risks")
-        console.print("[dim]Decisions are now searchable via `syncbot decisions <topic>`.[/dim]\n")
-        console.print(analyzer.format_slack_summary(notes))
-    else:
-        console.print(f"[red]Couldn't tell what kind of export '{path}' is.[/red]")
-        console.print("[dim]Expected: a .csv (Jira), a folder of .md/.html (Confluence), or a git clone (GitHub).[/dim]")
-
-
-@app.command("import", help="Import an export. Auto-detects Jira CSV / Confluence folder / GitHub clone.")
+@app.command("import", help="Import an export. Auto-detects Jira CSV / Confluence folder / GitHub clone / transcript.")
 def import_cmd(
-    path: str = typer.Argument(None, help="Path to the export (CSV, folder, or git clone). Omit for a guided wizard."),
+    path: str = typer.Argument(None, help="Path to the export (CSV, folder, git clone, or transcript). Omit for a guided wizard."),
     team: str = typer.Option(None, "--team", "-t", help="Team name (slug is derived automatically)."),
     config: str = typer.Option("config.yaml", help="Path to config.yaml"),
 ):
     """
-    Smart import — you don't pick the type or a slug; it figures both out.
+    Smart import — delegates to the channel-neutral ingest core (same code path
+    the Slack upload and MCP import use).
 
       syncbot import export.csv --team "Team Phoenix"     # one-liner
       syncbot import                                       # guided wizard
     """
-    # Wizard mode when essentials are missing
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.ingest import detect_source, ingest_path, slugify
+
     if not path:
-        console.print("[bold]SyncBot import wizard[/bold]  [dim](drop in a Jira CSV, a Confluence export folder, or a git clone)[/dim]\n")
+        console.print("[bold]SyncBot import wizard[/bold]  [dim](drop in a Jira CSV, a Confluence export folder, a git clone, or a transcript)[/dim]\n")
         path = typer.prompt("Path to your export")
-    source = _detect_source(path)
+    source = detect_source(path)
     if source == "unknown":
-        console.print(f"[red]Couldn't recognize '{path}'.[/red] Expected a .csv, a folder of docs, or a git clone.")
+        console.print(f"[red]Couldn't recognize '{path}'.[/red] Expected a .csv, a folder of docs, a git clone, or a transcript.")
         raise typer.Exit(1)
-
-    pretty = {
-        "jira": "Jira tickets (CSV)", "confluence": "Confluence pages",
-        "github": "GitHub merge history", "transcript": "Meeting transcript",
-    }[source]
+    pretty = {"jira": "Jira tickets (CSV)", "confluence": "Confluence pages",
+              "github": "GitHub merge history", "transcript": "Meeting transcript"}[source]
     console.print(f"Detected: [cyan]{pretty}[/cyan]")
-
     if not team:
         team = typer.prompt("Which team is this for? (e.g. Team Phoenix)")
-
-    console.print(f"Team: [cyan]{team}[/cyan]  →  folder [dim]{_slugify(team)}[/dim]\n")
-    _do_import(source, path, team, config)
+    console.print(f"Team: [cyan]{team}[/cyan]  →  folder [dim]{slugify(team)}[/dim]\n")
+    console.print(ingest_path(path, team, config))
 
 
 @app.command("build-manifest", help="Draft a team.yaml from whatever sources you have (repo, CODEOWNERS, roster CSV, Jira CSV, transcript).")

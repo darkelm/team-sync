@@ -188,10 +188,12 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] **Structured outputs — meeting extraction + semantic reuse** (ADOPTION Phase 3.5) — `messages.parse()` returns the same `DecisionLog`/`ActionItem`/`ReuseMatch` schemas as the heuristics; AI when a key is present, heuristic fallback otherwise (`src/agent/ai_enhance.py`)
 - [x] **Notification tuning** (ADOPTION Phase 4) — per-team severity thresholds, pause/resume, section toggles, and a quality gate (digest only sends if something changed); tunable from Slack
 
+- [x] **No-terminal, channel-neutral import** (ADOPTION Phase 5) — one ingest core (`src/ingest.py`); adapters for CLI, Slack file upload, and MCP (`import_export`); adding Teams/web is a thin adapter, not a rewrite
+
 ### Next
 - [ ] Add the Anthropic API key to flip the live bot + meeting extraction + reuse into AI mode (no code change)
-- [ ] Phase 3.5 cont. — manifest field inference via the same structured-output pattern
-- [ ] Phase 5 — deploy to Railway + no-terminal setup; Batch API for scheduled AI at scale
+- [ ] Deploy to Railway (browser steps + env vars — config ready)
+- [ ] Phase 3.5 cont. (manifest field inference) + Batch API + IT/Slack approval kit
 - [ ] **Deploy to Railway** — bot currently only runs while a local terminal session is alive; deploy as a background worker for 24/7 uptime (config + guide ready in DEPLOY.md, needs browser steps + rotated tokens)
 - [ ] GitHub live provider — activate (PAT needed)
 - [ ] Figma live provider — activate (access token needed)

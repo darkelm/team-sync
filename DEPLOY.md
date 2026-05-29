@@ -75,8 +75,20 @@ Set `[processes] app = "python slack_bot.py"` in `fly.toml` and remove any HTTP 
 
 ---
 
+## No-terminal setup (channel-neutral)
+
+Importing data needs no command line. The import logic lives in one channel-agnostic core (`src/ingest.py`); each surface is a thin adapter:
+
+- **Slack:** DM the bot a file (Jira CSV, Confluence export, transcript) with a message naming the team — e.g. _"import for Team Phoenix"_. Requires the `files:read` scope (in `slack/manifest.json`; re-install the app if you added it after first install).
+- **MCP:** any MCP client can call the `import_export(path, team)` tool.
+- **CLI:** `syncbot import <path> --team "…"` (delegates to the same core).
+
+Adding a Teams/Discord/web-upload path later means writing a ~30-line adapter that calls `ingest.ingest_upload(filename, bytes, team)` — the product logic doesn't change.
+
 ## Notes
 
-- **Synthetic data ships with the repo** (`data/synthetic/`), so GitHub/Figma providers work in `local` mode on the cloud with no extra setup. Flip them to `live` later via env vars.
+- **MCP server is a separate process** from the Slack bot. Railway's worker runs `python slack_bot.py`; run `python mcp_server.py` wherever the MCP client lives (often locally, via `.mcp.json`). They share all the same engine code.
+- **Python 3.10+** required (the MCP SDK's floor); `runtime.txt` pins 3.11.9 for Railway.
+- **Synthetic data ships with the repo** (`data/synthetic/`), so providers work in `local` mode on the cloud with no extra setup. Flip to `live` later via env vars.
 - **The bot is stateless** — it reads from providers on each request. Safe to restart anytime.
 - **Cost control:** a Socket Mode worker idles cheaply; it only does work when someone messages it or a scheduled digest runs.

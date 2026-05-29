@@ -110,11 +110,13 @@ Uses Anthropic **structured outputs** (`messages.parse()` with Pydantic) so Clau
 
 ---
 
-## Phase 5 — Make it real (kills barrier #5)
+## Phase 5 — Make it real (kills barrier #5) ◑ STARTED
 
-- **Deploy to Railway** (config ready) so it runs 24/7 independent of a laptop.
-- **No-terminal setup:** let the setup person drag an export into Slack (`@syncbot import` with an attachment) or a tiny upload page — so even the 1% never needs a terminal.
-- **IT/Slack approval kit:** minimal-permission Slack manifest, a one-pager on data handling (connectors-off posture, read-only, no data leaves the environment), and the export-based path for locked-down orgs.
+- **No-terminal setup — channel-neutral** ✅ — import logic lives in one channel-agnostic core (`src/ingest.py`); every surface is a thin adapter that hands it `(filename, bytes/path, team)`. Built adapters: **CLI** (delegates to the core), **Slack file upload** (DM the bot a file with "for Team X" → it imports; needs the `files:read` scope, now in the manifest), and **MCP** (`import_export` tool — any MCP client can trigger an import). A Teams/Discord/web-upload adapter is ~30 lines against the same core — Slack is not load-bearing.
+- **Deploy to Railway** ✅ config ready (`railway.json`, `Procfile`, `runtime.txt`, `requirements.txt`); ⬜ the browser steps + env vars are yours (see DEPLOY.md).
+- **Next — IT/Slack approval kit:** minimal-permission manifest, a one-pager on data handling (connectors-off posture, read-only, nothing leaves the environment), and the export-based path for locked-down orgs.
+
+> **Scales beyond Slack by design.** The three things that matter — the answer engine (`handle_query`/`execute_tool`), the ingest core (`src/ingest.py`), and the tool surface (`execute_tool`) — are all channel-neutral. Slack, MCP, and the CLI are adapters over the same code; adding Teams or a web UI means writing an adapter, not re-implementing the product.
 
 ---
 
