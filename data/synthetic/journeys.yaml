@@ -1,0 +1,27 @@
+# End-to-end experiences that span teams. Each references the components/areas
+# that make it up, so the system can read journey-level consistency (not just
+# per-component drift) and surface cross-team gaps.
+journeys:
+  - name: Onboarding
+    description: From sign-up to first value for a new user.
+    stages: [Sign up, Authenticate, Account setup, First dashboard view, Activation]
+    teams: [Team Phoenix, Team Horizon, Team Atlas]
+    components: [LoginFlow, AuthModal, OnboardingFlow, dashboard, user-profile-api]
+    owner: Jamal Foster
+    north_star: New users reach first value in under 5 minutes
+
+  - name: Notifications
+    description: How users learn about relevant activity across the product.
+    stages: [Event occurs, Delivered to feed, Surfaced in UI, User acts]
+    teams: [Team Horizon, Team Atlas, Team Nova]
+    components: [NotificationBell, notifications, data-pipeline]
+    owner: Mei Lin
+    north_star: Users see relevant updates in near real time
+
+  - name: Core Dashboard
+    description: The primary working surface users return to daily.
+    stages: [Load, Scan widgets, Drill in, Take action]
+    teams: [Team Horizon, Team Atlas, Team Nova]
+    components: [dashboard, DashboardLayout, DataTable]
+    owner: Tyler Brooks
+    north_star: A coherent, consistent dashboard regardless of which team built a widget

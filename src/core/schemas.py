@@ -146,6 +146,26 @@ class ConfluencePage(BaseModel):
     decision_log: Optional[DecisionLog] = None
 
 
+# ── Strategy & Experience (above components/screens) ──────────────────────────
+
+class Journey(BaseModel):
+    """An end-to-end user experience that spans multiple teams (onboarding, checkout…)."""
+    name: str
+    description: str
+    stages: list[str] = Field(default_factory=list)
+    teams: list[str] = Field(default_factory=list)        # teams that touch this journey
+    components: list[str] = Field(default_factory=list)   # components/areas that make it up
+    owner: str = ""                                       # experience DRI
+    north_star: str = ""                                  # the outcome this journey is judged by
+
+class ExperiencePrinciple(BaseModel):
+    """A design/experience principle that work should be measured against."""
+    id: str
+    name: str
+    statement: str
+    keywords: list[str] = Field(default_factory=list)     # used to map signals → this principle
+
+
 # ── Meetings / Transcripts ────────────────────────────────────────────────────
 
 class ActionItem(BaseModel):

@@ -32,6 +32,17 @@ Then back in Slack — it's now searchable:
 ```
 > "A decision made out loud in a meeting is now findable by anyone, forever."
 
+## Experience-strategy altitude (for design/strategy audiences)
+
+This is the higher-level story — coordination above components/screens:
+```
+@syncbot how's the onboarding journey?
+@syncbot show me all the experience journeys
+@syncbot are we upholding our experience principles?
+```
+→ journey-level *coherence across the teams that shape it* (not per-component), and whether live signals (inconsistencies, undocumented decisions, collisions) are working against the org's stated **experience principles**.
+> "This is the part that matters to experience strategy — is the *journey* coherent across everyone who touches it, and are we living up to our own principles?"
+
 ## Audience framing (optional flourish)
 ```
 @syncbot I'm an MD

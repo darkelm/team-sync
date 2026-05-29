@@ -128,5 +128,17 @@ def portfolio_status() -> str:
     return _run("portfolio_status")
 
 
+@mcp.tool()
+def journey_status(journey_name: str = "") -> str:
+    """Assess an end-to-end experience/journey (onboarding, checkout, notifications) that spans teams: coherence across teams, inconsistencies, ownership gaps, experience owner, north-star. Omit journey_name to list all journeys."""
+    return _run("journey_status", journey_name=journey_name or None)
+
+
+@mcp.tool()
+def experience_principles() -> str:
+    """Report whether the org is upholding its experience/design principles, mapping live signals to each principle."""
+    return _run("experience_principles")
+
+
 if __name__ == "__main__":
     mcp.run()

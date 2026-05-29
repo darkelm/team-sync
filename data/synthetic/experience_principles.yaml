@@ -1,0 +1,23 @@
+# The experience principles all work is measured against. The system maps live
+# signals (inconsistencies, undocumented decisions, collisions) to these so
+# leadership can see whether the org is *upholding its own principles*.
+principles:
+  - id: EP-1
+    name: One consistent visual language
+    statement: Every surface uses the shared design system. No local overrides or divergent variants.
+    keywords: [design system, library, tokens, component, consistency, drift, override, divergent, hover, icon, badge]
+
+  - id: EP-2
+    name: Respect the user's time
+    statement: Minimize steps and redundant data entry; the experience should be fast and frictionless.
+    keywords: [onboarding, steps, latency, speed, friction, session, expiry, polling, real-time]
+
+  - id: EP-3
+    name: Decisions are documented and shared
+    statement: Significant cross-team choices have a written, discoverable decision record before they ship.
+    keywords: [decision, breaking change, cross-team, schema, migration, deprecate]
+
+  - id: EP-4
+    name: One team owns each experience end-to-end
+    statement: Every journey has a clear experience owner; no orphaned surfaces or duplicated ownership.
+    keywords: [owner, ownership, duplicate, multiple teams, orphaned, collision]

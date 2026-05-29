@@ -153,6 +153,20 @@ def build_tools(providers: Providers) -> list[dict]:
             "name": "portfolio_status",
             "description": "Leadership rollup across ALL teams: how many are blocked/at-risk/on-track and the headline risk for each. Use for 'how are we doing overall', 'portfolio status', 'exec summary'. No per-component detail — built for leadership.",
             "input_schema": {"type": "object", "properties": {}, "required": []}
+        },
+        {
+            "name": "journey_status",
+            "description": "Assess an end-to-end EXPERIENCE/JOURNEY (e.g. onboarding, checkout, notifications) that spans teams: is it coherent across the teams that shape it, what's inconsistent, ownership gaps, the experience owner and north-star. Use for experience-strategy questions like 'how's the onboarding journey?', 'is checkout consistent across teams?'. Omit journey_name to list all journeys.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"journey_name": {"type": "string", "description": "Journey name; omit to list all"}},
+                "required": []
+            }
+        },
+        {
+            "name": "experience_principles",
+            "description": "Report whether the org is upholding its experience/design principles, mapping live signals (inconsistencies, undocumented decisions, collisions) to each principle. Use for 'are we living up to our experience principles', 'design vision adherence'.",
+            "input_schema": {"type": "object", "properties": {}, "required": []}
         }
     ]
 
@@ -361,5 +375,25 @@ def execute_tool(name: str, inputs: dict, providers: Providers) -> str:
             "team": h.team, "status": h.status, "headline": h.headline,
             "top_risk": h.risks[0] if h.risks else None,
         } for h in healths])
+
+    elif name == "journey_status":
+        from .strategy import StrategyLens
+        s = StrategyLens(providers)
+        jn = inputs.get("journey_name")
+        if jn:
+            h = s.assess_journey(jn)
+            if not h:
+                return f"No journey named '{jn}'. Known journeys: {', '.join(j.name for j in s.journeys)}."
+            return json.dumps({
+                "journey": h.name, "status": h.status, "owner": h.owner, "north_star": h.north_star,
+                "teams": h.teams, "inconsistencies": h.inconsistencies,
+                "collisions": h.collisions, "ownership_gaps": h.ownership_gaps,
+            })
+        return json.dumps([{"journey": j.name, "status": s.assess_journey(j.name).status,
+                            "description": j.description} for j in s.journeys])
+
+    elif name == "experience_principles":
+        from .strategy import StrategyLens
+        return StrategyLens(providers).principle_report()
 
     return f"Unknown tool: {name}"

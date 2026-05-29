@@ -37,6 +37,8 @@ alignment = AlignmentChecker(providers)
 locator = FindabilityLocator(providers)
 from src.agent.health import HealthAssessor
 health = HealthAssessor(providers)
+from src.agent.strategy import StrategyLens
+strategy = StrategyLens(providers)
 
 # Natural-language agent (Claude). Activates only if an API key is present;
 # otherwise the bot uses keyword matching (handle_query).
@@ -116,6 +118,18 @@ def handle_query(text: str) -> str:
             "_Ask `@syncbot help` for what I can do._",
         ]
         return "\n".join(lines)
+
+    # Experience strategy — journeys + principles (above components/screens)
+    if "principle" in q or "experience vision" in q or "design vision" in q or ("aligned" in q and "vision" in q):
+        return strategy.principle_report()
+    if "journey" in q or "journeys" in q or "end to end" in q or "end-to-end" in q or "experience" in q:
+        # specific journey if named, else list
+        named = next((j.name for j in strategy.journeys if j.name.lower() in q), None)
+        if named:
+            return strategy.format_journey(strategy.assess_journey(named))
+        if "journeys" in q or "list" in q or "all" in q or "experiences" in q:
+            return strategy.format_journeys()
+        return strategy.format_journeys()
 
     # Leadership rollup — portfolio + per-team health (Phase 7, leadership-framed)
     if any(w in q for w in ["portfolio", "exec summary", "exec status", "how are we doing",

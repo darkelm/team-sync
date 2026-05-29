@@ -190,6 +190,7 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 
 - [x] **No-terminal, channel-neutral import** (ADOPTION Phase 5) — one ingest core (`src/ingest.py`); adapters for CLI, Slack file upload, and MCP (`import_export`); adding Teams/web is a thin adapter, not a rewrite
 - [x] **Audience-aware experience** (ADOPTION Phase 7) — leadership rollup (`how's <team> doing?` / `portfolio status` — health, risks, trajectory, no component noise), weekly exec digest, per-user role framing (`@syncbot I'm a designer`), and a plain-language layer for non-technical readers (web dashboard intentionally out of scope)
+- [x] **Strategy & Experience layer** — coordination *above* components: **Journeys** (end-to-end experiences spanning teams — coherence, inconsistencies, ownership gaps, experience owner, north-star) and **Experience Principles** (maps live signals to whether the org is upholding its design vision). Surfaces via Slack, agent tools, and MCP (`journey_status`, `experience_principles`)
 
 ### Next
 - [ ] Add the Anthropic API key to flip the live bot + meeting extraction + reuse into AI mode (no code change)
