@@ -61,11 +61,9 @@ def answer(text: str) -> str:
 
 
 def _match_teams(text: str) -> list[str]:
-    """Return the names of all known teams mentioned in the text, in order of appearance."""
-    q = text.lower()
-    found = [(q.index(t.team.lower()), t.team) for t in providers.manifests.get_all_teams()
-             if t.team.lower() in q]
-    return [name for _, name in sorted(found)]
+    """Teams referenced in text — full/short name or fuzzy (tolerates typos)."""
+    from src.agent.fuzzy import resolve_teams
+    return resolve_teams(providers, text)
 
 
 def strip_mention(text: str) -> str:
@@ -88,6 +86,23 @@ def _load_meeting_notes() -> list[dict]:
 
 def handle_query(text: str) -> str:
     q = text.lower()
+
+    # Status / health — what's connected, how fresh, AI on?
+    if q.strip() in ("status", "health") or any(w in q for w in ["are you connected", "what's connected", "whats connected", "syncbot status", "system status"]):
+        teams = providers.manifests.get_all_teams()
+        verified = sum(1 for t in teams if t.last_verified)
+        prov = lambda k: os.getenv(f"{k}_PROVIDER", "local")
+        lines = [
+            "*🩺 SyncBot status*",
+            f"• Teams tracked: *{len(teams)}* ({verified} verified)",
+            f"• Understanding: *{'Claude agent (natural language)' if AGENT else 'keyword matching'}*",
+            "• Data sources: "
+            + ", ".join(f"{k} _{prov(k.upper())}_" for k in ["jira", "confluence", "github", "figma"]),
+            f"• Slack: _live_",
+            "",
+            "_Ask `@syncbot help` for what I can do._",
+        ]
+        return "\n".join(lines)
 
     # Notification preferences — pause/resume/severity (Phase 4 tuning)
     if any(w in q for w in ["mute", "pause digest", "snooze", "resume digest", "unmute",
@@ -145,22 +160,27 @@ def handle_query(text: str) -> str:
 
     # Who owns X
     if any(w in q for w in ["who owns", "who is responsible", "who do i talk to about", "owner of"]):
+        from src.agent.fuzzy import component_owner
         words = text.split()
-        # grab the last meaningful word as the component name
         component = words[-1].strip("?.,")
-        team = providers.manifests.find_component_owner(component)
+        team, suggestions = component_owner(providers, component)
         if team:
             return (
                 f"*{component}* is owned by *{team.team}*\n"
                 f"Owner: {team.owner.name} ({team.owner.slack_handle})\n"
                 f"Channel: {team.slack_channel}"
             )
-        return f"No team claims ownership of `{component}`. Check the manifests or ask in #general."
+        if suggestions:
+            opts = ", ".join(f"*{c}* ({tm})" for c, tm in suggestions)
+            return f"No exact match for `{component}`. Did you mean: {opts}?"
+        return f"No team owns `{component}` yet. Ask in #general, or the data owner may need to add it to a team manifest."
 
     # When does X ship
     if any(w in q for w in ["when does", "when is", "shipping", "deliver", "deliverables"]):
-        for team in providers.manifests.get_all_teams():
-            if team.team.lower() in q:
+        matched = _match_teams(text)
+        for team_name in matched:
+            team = providers.manifests.get_team(team_name)
+            if team:
                 tickets = providers.jira.get_upcoming_deliverables(team.team)
                 if not tickets:
                     return f"No upcoming deliverables with due dates found for *{team.team}*."
@@ -398,17 +418,19 @@ BOT_USER_ID = None
 
 @app.event("app_mention")
 def handle_mention(event, say):
+    # Reply in-thread to keep channels tidy.
+    thread_ts = event.get("thread_ts") or event.get("ts")
     text = strip_mention(event.get("text", ""))
     if not text:
-        say(handle_query("help"))
+        say(handle_query("help"), thread_ts=thread_ts)
         return
-    say(answer(text))
+    say(answer(text), thread_ts=thread_ts)
 
 
 @app.event("message")
 def handle_dm(event, say):
     if event.get("channel_type") == "im" and not event.get("bot_id"):
-        say(answer(event.get("text", "")))
+        say(answer(event.get("text", "")), thread_ts=event.get("thread_ts"))
 
 
 @app.event("member_joined_channel")

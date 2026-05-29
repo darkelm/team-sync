@@ -145,9 +145,15 @@ def build_tools(providers: Providers) -> list[dict]:
 
 def execute_tool(name: str, inputs: dict, providers: Providers) -> str:
     if name == "who_owns":
-        team = providers.manifests.find_component_owner(inputs["component_name"])
+        from .fuzzy import component_owner
+        team, suggestions = component_owner(providers, inputs["component_name"])
         if not team:
-            return f"No team claims ownership of '{inputs['component_name']}'."
+            if suggestions:
+                return json.dumps({
+                    "owner": None,
+                    "did_you_mean": [{"component": c, "team": tm} for c, tm in suggestions],
+                })
+            return f"No team owns '{inputs['component_name']}' yet."
         return json.dumps({
             "team": team.team,
             "owner": team.owner.name,
