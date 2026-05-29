@@ -64,13 +64,9 @@ class MeetingAnalyzer:
         low = text.lower()
         return [t for t in self.team_names if t.lower() in low]
 
-    def analyze(self, segments: list[Segment], team: str, title: str,
-                meeting_date: date | None = None) -> MeetingNotes:
-        meeting_date = meeting_date or date.today()
-        participants = sorted({s.speaker for s in segments if s.speaker != "Unknown"})
-        full_text = " ".join(s.text for s in segments)
-        teams_mentioned = sorted(set(self._teams_in(full_text)) - {team})
-
+    def _heuristic_extract(self, segments: list[Segment], team: str, meeting_date: date,
+                           participants: list[str]):
+        """Keyword/cue-based extraction — the always-available fallback."""
         decisions: list[DecisionLog] = []
         actions: list[ActionItem] = []
         risks: list[str] = []
@@ -79,44 +75,49 @@ class MeetingAnalyzer:
         for seg in segments:
             for sent in _sentences(seg.text):
                 low = sent.lower()
+                if any(c in low for c in DECISION_CUES) and low[:80] not in seen_decisions:
+                    seen_decisions.add(low[:80])
+                    decisions.append(DecisionLog(
+                        id=f"DEC-MTG-{len(decisions)+1}", title=sent[:80], decision=sent,
+                        rationale="Captured from meeting transcript; confirm with attendees.",
+                        decided_by=participants, date=meeting_date, status="draft",
+                        related_components=[], team=team,
+                    ))
+                if any(c in low for c in ACTION_CUES) and low[:80] not in seen_actions:
+                    seen_actions.add(low[:80])
+                    due_m = DUE_PAT.search(sent)
+                    actions.append(ActionItem(
+                        owner=self._find_owner(sent, seg.speaker), task=sent,
+                        due=due_m.group(0) if due_m else None, quote=f"{seg.speaker}: {sent}",
+                    ))
+                if any(c in low for c in RISK_CUES) and low[:80] not in seen_risks:
+                    seen_risks.add(low[:80])
+                    risks.append(sent)
+        return decisions, actions, risks
 
-                if any(c in low for c in DECISION_CUES):
-                    key = low[:80]
-                    if key not in seen_decisions:
-                        seen_decisions.add(key)
-                        rel_teams = self._teams_in(sent)
-                        decisions.append(DecisionLog(
-                            id=f"DEC-MTG-{len(decisions)+1}",
-                            title=sent[:80],
-                            decision=sent,
-                            rationale="Captured from meeting transcript; confirm with attendees.",
-                            decided_by=participants,
-                            date=meeting_date,
-                            status="draft",
-                            related_components=[],
-                            team=team,
-                        ))
+    def analyze(self, segments: list[Segment], team: str, title: str,
+                meeting_date: date | None = None) -> MeetingNotes:
+        meeting_date = meeting_date or date.today()
+        participants = sorted({s.speaker for s in segments if s.speaker != "Unknown"})
+        full_text = " ".join(s.text for s in segments)
+        teams_mentioned = sorted(set(self._teams_in(full_text)) - {team})
 
-                if any(c in low for c in ACTION_CUES):
-                    key = low[:80]
-                    if key not in seen_actions:
-                        seen_actions.add(key)
-                        due_m = DUE_PAT.search(sent)
-                        actions.append(ActionItem(
-                            owner=self._find_owner(sent, seg.speaker),
-                            task=sent,
-                            due=due_m.group(0) if due_m else None,
-                            quote=f"{seg.speaker}: {sent}",
-                        ))
-
-                if any(c in low for c in RISK_CUES):
-                    key = low[:80]
-                    if key not in seen_risks:
-                        seen_risks.add(key)
-                        risks.append(sent)
+        # AI extraction when a key is present (schema-identical); heuristic otherwise / on failure.
+        decisions = actions = risks = None
+        from .ai_enhance import ai_available
+        if ai_available():
+            try:
+                from .ai_enhance import extract_meeting
+                decisions, actions, risks = extract_meeting(segments, team, meeting_date, participants)
+                extraction = "ai"
+            except Exception as e:
+                print(f"[meeting] AI extraction failed, using heuristics: {e}", flush=True)
+        if decisions is None:
+            decisions, actions, risks = self._heuristic_extract(segments, team, meeting_date, participants)
+            extraction = "heuristic"
 
         summary = (f"{title} — {len(decisions)} decisions, {len(actions)} action items, "
-                   f"{len(risks)} risks. Participants: {', '.join(participants) or 'n/a'}.")
+                   f"{len(risks)} risks (via {extraction}). Participants: {', '.join(participants) or 'n/a'}.")
 
         return MeetingNotes(
             id=re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:50] or "meeting",
