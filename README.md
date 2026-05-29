@@ -222,18 +222,21 @@ Use the manifest at `slack/manifest.json` — paste into `api.slack.com/apps` �
 
 The differentiator: SyncBot works **before IT approves a single API connector**, using the exports anyone can pull today.
 
+> **Who does this?** Only one person, once per team, at setup. Everyone else just talks to the bot in Slack — they never touch a command line.
+
+There's **one command**. It auto-detects whether you handed it a Jira CSV, a Confluence export folder, or a git clone, and derives the team folder name for you:
+
 ```bash
-# Jira: Issue Navigator → Export → CSV
-syncbot import jira export.csv --team "Team Phoenix" --slug team-phoenix
-
-# Confluence: Space Settings → Export → HTML (unzip), or any folder of .md/.html
-syncbot import confluence ./phoenix-space --team "Team Phoenix" --slug team-phoenix --space PHX
-
-# GitHub: any local clone — reads merge history via git log, no token
-syncbot import github ../phoenix-repo --team "Team Phoenix" --slug team-phoenix --days 90
+syncbot import export.csv --team "Team Phoenix"      # one-liner
+syncbot import                                        # guided wizard (just asks 2 questions)
 ```
 
-Each importer normalizes the export into the same JSON the local providers read, so every feature (drift, conflicts, digests, briefings) works identically — no live access required. When connectors are eventually approved, flip the provider to `live` and the same features run against the API instead.
+Where to get each export (no admin access needed):
+- **Jira:** Issue Navigator → Export → CSV
+- **Confluence:** Space Settings → Export → HTML, then unzip (or any folder of `.md`/`.html`)
+- **GitHub:** any local `git clone` — reads merge history, no token
+
+Each import normalizes into the same JSON the local providers read, so every feature (drift, conflicts, digests, briefings) works identically — no live access required. When connectors are eventually approved, flip the provider to `live` and the same features run against the API instead.
 
 ---
 
