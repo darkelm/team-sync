@@ -131,6 +131,56 @@ The strategic capstone, and the concrete delivery of the original cross-platform
 
 ---
 
+## Phase 7 — Audience-aware experience: serve leadership, friendly for everyone (planned)
+
+**The gap (honest):** the product speaks *dev dialect* — components, PRs, drift, tickets. ICs (designers/devs/PMs) tolerate or navigate it; **MDs and leadership bounce off it** because they want *rollups and trajectory* ("is Phoenix on track? where are the risks?"), not *lookups and mechanics*. We already hold all the data to answer leadership questions — what's missing is a **framing layer**. This phase adds that, and makes every answer match how each persona thinks.
+
+### Persona × need matrix (what "friendly" means per role)
+
+| Persona | What they ask | What they need back |
+|---|---|---|
+| **Designer** | "is my design in sync? what was decided? has this been built?" | design-system status, decisions, reuse, findability — *design language, not "PRs"* |
+| **Dev** | "who owns X? what depends on this? what's drifting?" | ownership, dependencies, drift, tickets — technical is fine |
+| **PM** | "when does X ship? what's blocked? what changed?" | delivery dates, cross-team blockers, action items — *outcome language* |
+| **MD / Leadership** | "is the engagement on track? top risks? what slipped?" | **portfolio/team health, top 3 risks, week-over-week trajectory — zero per-component noise** |
+| **New joiner** | "get me up to speed on team X" | synthesized onboarding (already built) |
+
+### Part A — Audience model (cross-cutting foundation)
+- A lightweight role signal: per-user or per-channel role (e.g. `#exec-*` channels default to leadership), overridable by `@syncbot I'm a designer`. Default to "IC" when unknown.
+- One answer, rendered for the audience: jargon level, terseness, outcome-vs-mechanics. Reuses the existing `audience` param; extend it through the bot, agent, and digests.
+- **Discipline:** the *data* is identical across audiences; only framing changes.
+
+### Part B — Leadership rollup (the big unlock)
+A deterministic **team health** read (AI-optional for crisp phrasing), built from signals we already compute:
+- critical/high open issues, predicted conflicts, breaking changes without decision logs,
+- deliverables overdue or due-soon-but-not-started (due date vs status), design/code drift count, stale manifests, cross-team blockers.
+
+Roll into a status — 🟢 on-track / 🟡 at-risk / 🔴 blocked — with a one-line *why*, **top 3 risks in plain language**, **what changed since last week** (week-over-week deltas), and *who to talk to*.
+
+Surfaces (all channel-neutral): `@syncbot how's Team X doing?`, `@syncbot portfolio status` (all teams, one screen), a separate **weekly exec digest** (own cadence/audience), and an `execute_tool`/MCP tool so any AI surface can pull it.
+
+### Part C — Plain-language layer (friendly for everyone)
+- A small translation map applied on render for non-technical audiences: *drift → inconsistency, PR → code change, component → feature/area, manifest → team profile*.
+- Audit all bot copy for dev-isms; lead with outcomes, not mechanics.
+- Keep the forgiving behaviors already built (fuzzy matching, "did you mean", graceful unknowns, threads).
+
+### Part D — Read-only visual surface (bigger; stage last)
+A simple web dashboard for leadership who won't open Slack threads — portfolio health board, risk heat, trajectory. Real work; honestly Phase 7.D / a Phase 8. Reuses the same engine + the MCP/`execute_tool` data, so it's a *view*, not new logic.
+
+### Sequencing within Phase 7
+```
+A  Audience model ........ small; unblocks B and C
+B  Leadership rollup ..... biggest unlock; framing over existing data (heuristic; AI-crisper)
+C  Plain-language layer .. makes B and everything else friendly for non-technical roles
+D  Web dashboard ......... optional, larger; a view over the same engine
+```
+Recommended: **B first** (the leadership rollup is the highest-value gap), with a thin slice of **A** to carry the audience flag, then **C** to de-jargon. **D** only if a non-Slack leadership surface is required.
+
+### Definition of "friendly for everyone"
+A designer, a PM, and an MD can each ask the system something in their own words and get an answer framed the way *they* think — the designer hears design language, the MD hears health and risk with no component-level noise — all from the same grounded data, with no dead-ends and no jargon they don't speak.
+
+---
+
 ## Sequencing
 
 ```
@@ -140,11 +190,12 @@ Phase 3    Claude agent + UX ....... makes it feel intelligent              ✅
 Phase 3.5  Structured outputs ...... AI supercharges the heuristics (parity)
 Phase 4    Notification tuning ..... keeps the proactive value alive
            + Batch API ............. cheap scheduled AI at scale
-Phase 5    Deploy + no-terminal .... makes it production-real
-Phase 6    MCP server .............. supercharge any AI; the portability unlock
+Phase 5    Deploy + no-terminal .... makes it production-real                ◑
+Phase 6    MCP server .............. supercharge any AI; portability unlock   ✅
+Phase 7    Audience-aware .......... serve leadership; friendly for everyone  ⬜ (planned)
 ```
 
-Adoption phases (1, 2, 4, 5) and capability multipliers (3, 3.5, 6) interleave. Phases 1–3 are done. Recommended next: **Phase 6 (MCP)** for the strategic unlock, or **Phase 3.5 (structured outputs)** to make AI-enhanced extraction reliable — both preserve AI-optional discipline.
+Phases 1–4, 6 done; 3.5 done; 5 = no-terminal done + Railway is yours. **Phase 7 is the next build** — the leadership rollup (7.B) is the biggest remaining value gap, with a thin audience flag (7.A) and the plain-language layer (7.C). All preserve the AI-optional + channel-neutral discipline.
 
 ---
 
