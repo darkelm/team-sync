@@ -8,6 +8,7 @@ Built to prove out with synthetic data first, then swap in real integrations via
 - **README** (this file) — the vision: what it does, the 5 layers, architecture, status
 - **[IDEAS.md](IDEAS.md)** — research-backed capability roadmap + the trigger/channel map
 - **[POSITIONING.md](POSITIONING.md)** — competitive landscape and strategy
+- **[VS-COPILOT.md](VS-COPILOT.md)** — how this differs from Copilot / Claude-in-Slack / ChatGPT connectors (the most-asked question)
 - **[ADOPTION.md](ADOPTION.md)** — the plan to remove pilot barriers (manifest builder, freshness, NLU, fatigue, hosting)
 - **[DEPLOY.md](DEPLOY.md)** — cloud deployment (Railway/Render/Fly)
 
