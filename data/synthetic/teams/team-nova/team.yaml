@@ -62,3 +62,16 @@ quarter_goals:
   - Ship design system v3.0 with updated color tokens (breaking change for all teams)
   - Document all components with usage guidelines
   - Establish design review process for cross-team component proposals
+resources:
+  - name: Brand assets & logo kit
+    type: brand-assets
+    url: https://brandfolder.com/acme/brand-kit
+    description: Official logos, color palette, typography, icon set, illustration library
+  - name: Design system documentation site
+    type: doc
+    url: https://design.acme.co
+    description: Component usage guidelines, accessibility specs, do's and don'ts
+  - name: Design tokens repository
+    type: repo
+    url: https://github.com/acme/design-tokens
+    description: Source of truth for color, spacing, typography tokens across all platforms

@@ -73,6 +73,13 @@ class FigmaFile(BaseModel):
     url: str
     last_updated: Optional[date] = None
 
+class Resource(BaseModel):
+    """A findable thing a team owns: research repo, brand assets, prototype, doc, etc."""
+    name: str
+    type: str  # research | brand-assets | prototype | repo | doc | roadmap | figma | dashboard | other
+    url: str
+    description: str = ""
+
 class TeamManifest(BaseModel):
     team: str
     description: str
@@ -87,6 +94,7 @@ class TeamManifest(BaseModel):
     dependencies: list[TeamDependency] = Field(default_factory=list)
     roadmap_link: Optional[str] = None
     quarter_goals: list[str] = Field(default_factory=list)
+    resources: list[Resource] = Field(default_factory=list)
 
 
 # ── Jira ─────────────────────────────────────────────────────────────────────

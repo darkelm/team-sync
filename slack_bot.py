@@ -24,6 +24,7 @@ from src.agent.briefing import BriefingGenerator
 from src.agent.scheduler import DigestScheduler
 from src.agent.discovery import CollaboratorDiscovery, ReuseRadar
 from src.agent.alignment import AlignmentChecker
+from src.agent.findability import FindabilityLocator
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
 providers = Providers("config.yaml")
@@ -33,6 +34,7 @@ briefing_gen = BriefingGenerator(providers)
 discovery = CollaboratorDiscovery(providers)
 reuse_radar = ReuseRadar(providers)
 alignment = AlignmentChecker(providers)
+locator = FindabilityLocator(providers)
 
 
 def _match_teams(text: str) -> list[str]:
@@ -49,6 +51,20 @@ def strip_mention(text: str) -> str:
 
 def handle_query(text: str) -> str:
     q = text.lower()
+
+    # Findability — where do I find X?
+    if any(w in q for w in ["where do i find", "where is", "where can i find", "where are", "where's", "looking for", "find the"]):
+        import re as _re
+        query = _re.sub(r".*(where do i find|where can i find|where is|where are|where's|looking for|find the)\b",
+                        "", text, flags=_re.I).strip(" ?.the")
+        query = query or text
+        results = locator.find(query)
+        if not results:
+            return f"Couldn't locate anything for “{query}”. It may not be registered yet — ask the owning team to add it."
+        lines = [f"*📍 Where to find “{query}”:*\n"]
+        for r in results[:6]:
+            lines.append(f"• *{r.label}:* <{r.url}|{r.name}> — owned by {r.team}")
+        return "\n".join(lines)
 
     # Who owns X
     if any(w in q for w in ["who owns", "who is responsible", "who do i talk to about", "owner of"]):
@@ -268,6 +284,7 @@ def handle_query(text: str) -> str:
     return (
         "*SyncBot commands:*\n\n"
         "• `@syncbot who owns <component>` — find component owner\n"
+        "• `@syncbot where do I find <thing>` — locate research, assets, files, docs\n"
         "• `@syncbot when does <team> ship` — upcoming deliverables\n"
         "• `@syncbot what was decided about <topic>` — search decision logs\n"
         "• `@syncbot scan for conflicts` — current drift and conflict report\n"

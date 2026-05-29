@@ -74,6 +74,25 @@ The connectors-off philosophy means triggers come in three flavors: **webhooks**
 | **Storybook / Tokens Studio** | Token or component version bump | Notify consumers; drift scan |
 | **Design handoff (Zeplin/Abstract)** | Handoff marked ready | Update handoff-status answers |
 
+### Additional signal sources — where work is discussed & understood
+
+Beyond the system-of-record tools above, a lot of coordination signal lives in *conversational* and *informal* surfaces. These are higher-effort to wire but often where the real decisions happen.
+
+| Source | Why it matters | Trigger → action |
+|---|---|---|
+| **Meeting transcripts** (Zoom, Google Meet, Teams, Otter, Fireflies, Granola) | ⭐ The biggest gap. Design critiques, reviews, and roadmap calls happen live and evaporate — decisions are made verbally and never logged. | Transcript posted → extract decisions & action items → flag decision-log gaps, detect cross-team commitments, auto-draft a decision record |
+| **Whiteboards** (FigJam, Miro, Mural) | Workshops, affinity maps, brainstorms, journey maps — early thinking that signals what a team is exploring. | New board / workshop → Reuse Radar ("another team explored this"), surface to related teams |
+| **Async video** (Loom, Vidyard) | Design walkthroughs and demos shared instead of meetings. | New walkthrough tagged to a component/feature → attach to that team's context, notify dependents |
+| **PRD / spec docs** (Google Docs, Notion, Coda, SharePoint) | The actual product intent often lives here, not in Jira. | New/edited spec → link to tickets, index for Findability, alignment check |
+| **Customer feedback** (Dovetail, Zendesk, Intercom, Productboard insights, app-store reviews) | The "why" behind design work; multiple teams often react to the same feedback. | New high-signal theme → notify teams in that problem space, dedupe responses |
+| **Analytics & experimentation** (Amplitude, Mixpanel, Statsig, LaunchDarkly) | Feature usage and experiment results that should drive design decisions. | Experiment concludes / flag flips → notify owning + dependent teams |
+| **DAM / brand systems** (Brandfolder, Bynder, Frontify) | The real source of truth for brand assets — drift here = off-brand work. | Asset updated → notify consumers; answer Findability "where's the logo" |
+| **Knowledge bases** (Guru, Slab, Confluence) | Where "how/why" lives; goes stale silently. | Verification expires → flag stale knowledge to owner |
+| **Email** | Approvals, briefs, and external stakeholder decisions still flow here. | Brief/approval thread → index for Findability, link to owning team |
+| **Spreadsheets** (Google Sheets, Excel) | Roadmaps and trackers secretly live here more than anyone admits. | Tracker changes → reconcile against the canonical roadmap |
+
+> The standout to prioritize is **meeting transcripts** — it's where design decisions are densest and least captured, it's increasingly accessible via tools that already produce text exports (connectors-off friendly), and it feeds directly into our existing decision-log-gap detection.
+
 ### Output / delivery channels (where we reach people)
 
 - **Slack / Teams** — primary: digests, alerts, Q&A (Slack live today)

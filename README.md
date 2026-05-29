@@ -165,10 +165,14 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] **Reuse Radar** — "has anyone already built/researched this?" before you start (live in Slack)
 - [x] **Strategic Alignment Checker** — flags goals not laddering up to company objectives (live in Slack)
 
+- [x] **Findability Locator** — "where do I find X" across resources, Figma, roadmaps, docs (live in Slack)
+- [x] Fully team-agnostic — no hardcoded team names; design-system owner detected from data
+- [x] Expanded trigger map incl. meeting transcripts, whiteboards, analytics, customer feedback (IDEAS.md)
+
 ### Next
 - [ ] **Claude agent** — natural-language understanding (needs Anthropic API key; replaces keyword matching — highest-leverage upgrade; also unlocks semantic duplicate-work detection)
-- [ ] Findability Locator — "where do I find X" (resource registry per team)
-- [ ] New triggers: calendar-driven briefings, Figma webhook (see IDEAS.md trigger map)
+- [ ] **Meeting-transcript ingestion** — extract decisions/action items, fill decision-log gaps (highest-value new signal source)
+- [ ] New triggers: calendar-driven briefings, Figma webhook, nightly snapshot scan (see IDEAS.md trigger map)
 - [ ] **Deploy to Railway** — bot currently only runs while a local terminal session is alive; deploy as a background worker for 24/7 uptime (config + guide ready in DEPLOY.md, needs browser steps + rotated tokens)
 - [ ] GitHub live provider — activate (PAT needed)
 - [ ] Figma live provider — activate (access token needed)

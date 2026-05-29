@@ -65,3 +65,12 @@ quarter_goals:
   - Launch redesigned dashboard by Q2 end
   - Migrate all local component overrides back to Nova design system
   - Ship notifications v2 with real-time updates
+resources:
+  - name: User research repository
+    type: research
+    url: https://dovetail.com/acme/horizon-research
+    description: Usability studies, user interviews, onboarding research, dashboard testing findings
+  - name: Dashboard redesign prototype
+    type: prototype
+    url: https://figma.com/proto/jkl012/dashboard-redesign
+    description: Interactive prototype of the new dashboard layout for stakeholder review
