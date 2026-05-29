@@ -1,5 +1,6 @@
 """Weekly digest generator — produces per-team summaries for Slack."""
 from datetime import date, datetime, timezone, timedelta
+from typing import Optional
 from ..core.schemas import TeamDigest
 from ..providers.factory import Providers
 from .detector import DriftDetector
@@ -9,6 +10,21 @@ class DigestGenerator:
     def __init__(self, providers: Providers):
         self.p = providers
         self.detector = DriftDetector(providers)
+
+    def _design_system_team(self) -> Optional[str]:
+        """Detect which team owns the design system library — no hardcoded names.
+
+        Signal 1: the team that owns Figma library components.
+        Signal 2: the team whose own Figma file is the shared design_system_library.
+        """
+        libs = self.p.figma.get_library_components()
+        if libs:
+            from collections import Counter
+            return Counter(c.team for c in libs).most_common(1)[0][0]
+        for t in self.p.manifests.get_all_teams():
+            if t.design_system_library and any(f.url == t.design_system_library for f in t.figma_files):
+                return t.team
+        return None
 
     def generate_for_team(self, team_name: str) -> TeamDigest:
         team = self.p.manifests.get_team(team_name)
@@ -30,10 +46,11 @@ class DigestGenerator:
         design_issues = [i for i in team_issues if i.type == "design_drift"]
         design_updates = [f"Design drift detected: {i.title}" for i in design_issues]
 
-        # Check for design system updates from Nova
-        nova_prs = [p for p in recent_prs if p.team == "Team Nova"]
-        for pr in nova_prs:
-            design_updates.append(f"[Design System] Nova merged: {pr.title} — review your Figma files")
+        # Check for design system updates from whichever team owns the library
+        ds_team = self._design_system_team()
+        if ds_team and ds_team != team_name:
+            for pr in (p for p in recent_prs if p.team == ds_team):
+                design_updates.append(f"[Design System] {ds_team} merged: {pr.title} — review your Figma files")
 
         dep_changes = []
         for dep_pr in dep_prs:
@@ -96,7 +113,7 @@ class DigestGenerator:
             lines.extend([f"  • {a}" for a in digest.action_items[:5]])
 
         lines.append("")
-        lines.append("_Ask @syncbot anything: `@syncbot who owns auth` | `@syncbot when does Team Atlas ship` | `@syncbot scan for conflicts`_")
+        lines.append("_Ask @syncbot anything: `@syncbot who owns <component>` | `@syncbot when does <team> ship` | `@syncbot scan for conflicts`_")
 
         return "\n".join(lines)
 

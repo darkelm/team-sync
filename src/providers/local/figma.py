@@ -49,6 +49,6 @@ class LocalFigmaProvider(FigmaProvider):
                 teams_involved=[component.team],
                 components_involved=[component.name],
                 detected_at=datetime.now(timezone.utc),
-                suggested_action="Sync with Team Nova's design system library or raise a design review.",
+                suggested_action="Re-sync with the shared design system library or raise a design review.",
             ))
         return issues
