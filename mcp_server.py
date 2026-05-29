@@ -116,5 +116,17 @@ def import_export(path: str, team: str) -> str:
     return ingest_path(path, team)
 
 
+@mcp.tool()
+def team_health(team_name: str) -> str:
+    """Leadership-framed health of one team: on-track/at-risk/blocked, top risks in plain language, what changed, who to talk to."""
+    return _run("team_health", team_name=team_name)
+
+
+@mcp.tool()
+def portfolio_status() -> str:
+    """Leadership rollup across all teams: how many blocked/at-risk/on-track, with each team's headline risk. No per-component detail."""
+    return _run("portfolio_status")
+
+
 if __name__ == "__main__":
     mcp.run()

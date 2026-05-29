@@ -20,3 +20,10 @@ digest:
 drift:
   scan_on_pr: true
   scan_schedule: "0 8 * * *"   # Daily 8am
+
+# Leadership rollup framing — neutral defaults; swap to engagement/workstream
+# language for a consultancy, or product-area/squad for an internal org.
+leadership:
+  unit_label: "team"          # what a single unit is called (team | workstream | squad)
+  portfolio_label: "portfolio" # the collection of units (portfolio | engagement | product area)
+  exec_channel: ""            # optional Slack channel for the weekly exec digest

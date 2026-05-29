@@ -35,6 +35,8 @@ discovery = CollaboratorDiscovery(providers)
 reuse_radar = ReuseRadar(providers)
 alignment = AlignmentChecker(providers)
 locator = FindabilityLocator(providers)
+from src.agent.health import HealthAssessor
+health = HealthAssessor(providers)
 
 # Natural-language agent (Claude). Activates only if an API key is present;
 # otherwise the bot uses keyword matching (handle_query).
@@ -103,6 +105,18 @@ def handle_query(text: str) -> str:
             "_Ask `@syncbot help` for what I can do._",
         ]
         return "\n".join(lines)
+
+    # Leadership rollup — portfolio + per-team health (Phase 7, leadership-framed)
+    if any(w in q for w in ["portfolio", "exec summary", "exec status", "how are we doing",
+                            "overall status", "everything on track", "leadership view"]):
+        return health.format_portfolio()
+    if (("how" in q and "doing" in q) or "health of" in q or "how is" in q and "doing" in q
+            or "on track" in q):
+        teams = _match_teams(text)
+        if teams:
+            h = health.assess(teams[0])
+            return health.format_team(h) if h else f"Couldn't find that team."
+        return "Which team? e.g. `@syncbot how's Team Phoenix doing?` — or `@syncbot portfolio status` for everyone."
 
     # Notification preferences — pause/resume/severity (Phase 4 tuning)
     if any(w in q for w in ["mute", "pause digest", "snooze", "resume digest", "unmute",

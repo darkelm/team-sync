@@ -139,6 +139,20 @@ def build_tools(providers: Providers) -> list[dict]:
                 "properties": {"team": {"type": "string", "description": "Optional team filter"}},
                 "required": []
             }
+        },
+        {
+            "name": "team_health",
+            "description": "Leadership-framed health of one team: on-track/at-risk/blocked, top risks in plain language, what changed since last check, who to talk to. Use for 'how's team X doing', 'is X on track', 'health of X'. Best for PM/MD/leadership questions.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"team_name": {"type": "string"}},
+                "required": ["team_name"]
+            }
+        },
+        {
+            "name": "portfolio_status",
+            "description": "Leadership rollup across ALL teams: how many are blocked/at-risk/on-track and the headline risk for each. Use for 'how are we doing overall', 'portfolio status', 'exec summary'. No per-component detail — built for leadership.",
+            "input_schema": {"type": "object", "properties": {}, "required": []}
         }
     ]
 
@@ -329,5 +343,23 @@ def execute_tool(name: str, inputs: dict, providers: Providers) -> str:
                             "owner": a.get("owner"), "task": a.get("task"), "due": a.get("due"),
                         })
         return json.dumps(items) if items else "No action items found in ingested meetings."
+
+    elif name == "team_health":
+        from .health import HealthAssessor
+        h = HealthAssessor(providers).assess(inputs["team_name"])
+        if not h:
+            return f"Team '{inputs['team_name']}' not found."
+        return json.dumps({
+            "team": h.team, "status": h.status, "headline": h.headline,
+            "risks": h.risks, "changes": h.changes, "contact": h.contact,
+        })
+
+    elif name == "portfolio_status":
+        from .health import HealthAssessor
+        healths = HealthAssessor(providers).portfolio()
+        return json.dumps([{
+            "team": h.team, "status": h.status, "headline": h.headline,
+            "top_risk": h.risks[0] if h.risks else None,
+        } for h in healths])
 
     return f"Unknown tool: {name}"

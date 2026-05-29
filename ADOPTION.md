@@ -131,7 +131,13 @@ The strategic capstone, and the concrete delivery of the original cross-platform
 
 ---
 
-## Phase 7 — Audience-aware experience: serve leadership, friendly for everyone (planned)
+## Phase 7 — Audience-aware experience: serve leadership, friendly for everyone ◑ STARTED
+
+**Built:** the leadership rollup (7.B) + plain-language layer (7.C). `src/agent/health.py` assesses each team as 🟢/🟡/🔴 from signals we already compute (critical/high issues, predicted conflicts, overdue/at-risk deliverables, missing decision records, design inconsistencies, stale profiles), with top-3 plain-language risks, week-over-week trajectory, and who to talk to — **no per-component noise**. Surfaces: `@syncbot how's <team> doing?`, `@syncbot portfolio status`, plus `team_health`/`portfolio_status` as agent + MCP tools. Terminology is configurable (`config.yaml → leadership`) for engagement/workstream vs product-area/squad. `src/agent/plain.py` de-jargons output for non-technical readers. **Next within Phase 7:** full per-user audience routing (7.A) so *every* answer auto-frames by role, the weekly exec digest to a configured channel, and the optional web dashboard (7.D).
+
+---
+
+### Original plan (for reference)
 
 **The gap (honest):** the product speaks *dev dialect* — components, PRs, drift, tickets. ICs (designers/devs/PMs) tolerate or navigate it; **MDs and leadership bounce off it** because they want *rollups and trajectory* ("is Phoenix on track? where are the risks?"), not *lookups and mechanics*. We already hold all the data to answer leadership questions — what's missing is a **framing layer**. This phase adds that, and makes every answer match how each persona thinks.
 
