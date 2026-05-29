@@ -55,6 +55,7 @@ class ManifestBuilder:
         self.known_teams = known_teams or []
         self.cs = CandidateSet()
         self.sources_used: list[str] = []
+        self.context_text = ""  # README/doc text for optional AI enrichment
 
     def add_source(self, path: str) -> None:
         kind = detect_source_kind(path)
@@ -64,6 +65,7 @@ class ManifestBuilder:
             co = CodeownersAdapter(path).extract()
             if co:
                 self.cs.extend(co); self._mark("codeowners")
+            self._capture_readme(path)
         elif kind == "codeowners":
             self.cs.extend(CodeownersAdapter(os.path.dirname(path) or ".").extract()); self._mark("codeowners")
         elif kind == "transcript":
@@ -78,6 +80,30 @@ class ManifestBuilder:
         if s not in self.sources_used:
             self.sources_used.append(s)
 
+    def _capture_readme(self, repo_path: str) -> None:
+        for name in ("README.md", "README.rst", "README.txt", "README"):
+            p = os.path.join(repo_path, name)
+            if os.path.isfile(p):
+                try:
+                    with open(p, encoding="utf-8", errors="ignore") as f:
+                        self.context_text = f.read()
+                except OSError:
+                    pass
+                return
+
+    def _ai_enrich(self) -> dict:
+        """Optional: infer team + component descriptions from README text. Empty dict if unavailable."""
+        from ..agent.ai_enhance import ai_available
+        if not ai_available() or not self.context_text:
+            return {}
+        try:
+            from ..agent.ai_enhance import infer_manifest
+            comp_names = [fc.value.get("name", "") for fc in self.cs.collection("components.code[]")]
+            return infer_manifest(self.team, self.context_text, comp_names)
+        except Exception as e:
+            print(f"[builder] AI enrichment skipped: {e}", flush=True)
+            return {}
+
     # ── rendering ────────────────────────────────────────────────────────────
 
     def build(self) -> BuildResult:
@@ -85,9 +111,16 @@ class ManifestBuilder:
         conflicts: list[str] = []
         lines: list[str] = [f"team: {self.team}"]
 
-        # description — never inferred reliably; always a gap
-        lines.append('description: ""  # TODO: one-line team mission')
-        gaps.append("description")
+        # Optional AI enrichment (description + component descriptions) from README text.
+        ai = self._ai_enrich()
+        ai_comp_desc = ai.get("component_descriptions", {})
+
+        # description — AI-inferred from README when available, else a gap to fill.
+        if ai.get("description"):
+            lines.append(f'description: "{ai["description"]}"  # inferred from README [ai] — confirm')
+        else:
+            lines.append('description: ""  # TODO: one-line team mission')
+            gaps.append("description")
 
         # owner
         owner = self.cs.scalar("owner")
@@ -145,7 +178,8 @@ class ManifestBuilder:
                 seen.add(v.get("name","").lower())
                 lines.append(f"    - name: {v.get('name','')}  # {c.note} [{','.join(c.sources)}]")
                 lines.append(f"      path: {v.get('path','') or 'TODO'}")
-                lines.append(f"      description: {v.get('description','')}")
+                desc = ai_comp_desc.get(v.get("name", ""), v.get("description", ""))
+                lines.append(f"      description: {desc}")
         else:
             lines.append("    []  # TODO: no code sources provided")
             gaps.append("components.code")

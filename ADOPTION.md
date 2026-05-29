@@ -87,13 +87,13 @@ Each adapter extracts candidate manifest fields *with provenance and confidence*
 
 ---
 
-## Phase 3.5 — Structured outputs: make the AI-enhanced heuristics reliable (capability multiplier) ◑ STARTED
+## Phase 3.5 — Structured outputs: make the AI-enhanced heuristics reliable (capability multiplier) ✅ BUILT
 
 Uses Anthropic **structured outputs** (`messages.parse()` with Pydantic) so Claude returns the **exact same schema** the heuristics produce — a drop-in quality lift, not a parallel codepath. The pattern is established in `src/agent/ai_enhance.py`: AI selected only when a key is present, schema-identical results, automatic fallback to the heuristic on any failure.
 
 - **Meeting extraction** ✅ — `MeetingAnalyzer.analyze` now prefers AI (clean decisions-vs-discussion, owners resolved, due dates) returning the same `DecisionLog` / `ActionItem` objects; falls back to the regex extractor with no key or on error. The summary records which path ran (`via ai` / `via heuristic`).
 - **Semantic reuse / duplicate detection** — next, same pattern: real meaning ("alert badge" ≈ "notification bell") returning the same `ReuseMatch` shape as the Jaccard version.
-- **Manifest inference** — next: AI proposes fields as `Candidate` objects with confidence, fused exactly like the deterministic adapters.
+- **Manifest inference** ✅ — `ManifestBuilder` reads the repo README and, when a key is present, AI-fills the team `description` and per-component descriptions (instead of TODO/"Code module at …"); silently skipped without a key, so the draft is identical otherwise.
 - **Citations** (optional add-on): cite Confluence source spans — reinforces provenance/trust.
 - **Discipline upheld:** each keeps its heuristic implementation; structured-output AI is selected only when a key is present. Schema parity is the rule.
 

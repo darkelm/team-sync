@@ -137,3 +137,48 @@ def semantic_reuse(description: str, catalog: list[dict]) -> list[tuple[dict, st
         if 0 <= hit.index < len(catalog):
             out.append((catalog[hit.index], hit.reason))
     return out
+
+
+# ── Manifest field inference (structured output) ──────────────────────────────
+
+class _AICompDesc(BaseModel):
+    name: str
+    description: str
+
+class _AIManifest(BaseModel):
+    team_description: str
+    component_descriptions: list[_AICompDesc]
+
+
+def infer_manifest(team: str, context_text: str, component_names: list[str]) -> dict:
+    """Infer the manifest fields no deterministic source can supply well — the team's
+    one-line description and a real description per component — from README/doc text.
+
+    Returns {"description": str, "component_descriptions": {name: desc}}. Raises on failure.
+    """
+    import anthropic
+
+    prompt = (
+        f"You are documenting the team '{team}' for an internal team directory.\n"
+        f"Components owned by this team: {', '.join(component_names) or 'unknown'}.\n\n"
+        "From the context below, write:\n"
+        "1. team_description: one concise sentence on what this team owns/does.\n"
+        "2. component_descriptions: for each component above, a one-line description of what it does "
+        "(infer from the name + context; keep it factual, no guessing at features not implied).\n\n"
+        f"Context:\n{context_text[:6000]}"
+    )
+
+    client = anthropic.Anthropic()
+    resp = client.messages.parse(
+        model=MODEL,
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=_AIManifest,
+    )
+    data = resp.parsed_output
+    if data is None:
+        raise ValueError("AI manifest inference returned no parsed output")
+    return {
+        "description": data.team_description.strip(),
+        "component_descriptions": {c.name: c.description.strip() for c in data.component_descriptions},
+    }
