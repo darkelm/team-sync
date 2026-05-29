@@ -145,6 +145,27 @@ class ConfluencePage(BaseModel):
     decision_log: Optional[DecisionLog] = None
 
 
+# ── Meetings / Transcripts ────────────────────────────────────────────────────
+
+class ActionItem(BaseModel):
+    owner: Optional[str] = None
+    task: str
+    due: Optional[str] = None
+    quote: str = ""
+
+class MeetingNotes(BaseModel):
+    id: str
+    title: str
+    date: date
+    team: str
+    participants: list[str] = Field(default_factory=list)
+    teams_mentioned: list[str] = Field(default_factory=list)
+    decisions: list[DecisionLog] = Field(default_factory=list)
+    action_items: list[ActionItem] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
 # ── GitHub ────────────────────────────────────────────────────────────────────
 
 class PullRequest(BaseModel):

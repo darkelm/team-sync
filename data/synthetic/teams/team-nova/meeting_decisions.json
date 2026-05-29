@@ -1,0 +1,98 @@
+[
+  {
+    "id": "design-review-2026-05-28-DEC-MTG-1",
+    "title": "[Meeting] We decided to standardize on Nova's canonical NotificationBell for everyone.",
+    "space": "Team Nova",
+    "team": "Team Nova",
+    "content_summary": "We decided to standardize on Nova's canonical NotificationBell for everyone.",
+    "tags": [
+      "decision-log",
+      "meeting"
+    ],
+    "last_updated": "2026-05-29",
+    "author": "Amara Osei, Jamal Foster",
+    "url": "meeting://design-review-2026-05-28",
+    "decision_log": {
+      "id": "DEC-MTG-1",
+      "title": "We decided to standardize on Nova's canonical NotificationBell for everyone.",
+      "decision": "We decided to standardize on Nova's canonical NotificationBell for everyone.",
+      "rationale": "Captured from meeting transcript; confirm with attendees.",
+      "alternatives_considered": [],
+      "decided_by": [
+        "Amara Osei",
+        "Jamal Foster",
+        "Lucia Ferreira",
+        "Priya Nair"
+      ],
+      "date": "2026-05-29",
+      "status": "draft",
+      "related_tickets": [],
+      "related_components": [],
+      "team": "Team Nova"
+    }
+  },
+  {
+    "id": "design-review-2026-05-28-DEC-MTG-2",
+    "title": "[Meeting] Let's go with waiting until v3 ships, then Horizon migrates.",
+    "space": "Team Nova",
+    "team": "Team Nova",
+    "content_summary": "Let's go with waiting until v3 ships, then Horizon migrates.",
+    "tags": [
+      "decision-log",
+      "meeting"
+    ],
+    "last_updated": "2026-05-29",
+    "author": "Amara Osei, Jamal Foster",
+    "url": "meeting://design-review-2026-05-28",
+    "decision_log": {
+      "id": "DEC-MTG-2",
+      "title": "Let's go with waiting until v3 ships, then Horizon migrates.",
+      "decision": "Let's go with waiting until v3 ships, then Horizon migrates.",
+      "rationale": "Captured from meeting transcript; confirm with attendees.",
+      "alternatives_considered": [],
+      "decided_by": [
+        "Amara Osei",
+        "Jamal Foster",
+        "Lucia Ferreira",
+        "Priya Nair"
+      ],
+      "date": "2026-05-29",
+      "status": "draft",
+      "related_tickets": [],
+      "related_components": [],
+      "team": "Team Nova"
+    }
+  },
+  {
+    "id": "design-review-2026-05-28-DEC-MTG-3",
+    "title": "[Meeting] We'll adopt that sequencing.",
+    "space": "Team Nova",
+    "team": "Team Nova",
+    "content_summary": "We'll adopt that sequencing.",
+    "tags": [
+      "decision-log",
+      "meeting"
+    ],
+    "last_updated": "2026-05-29",
+    "author": "Amara Osei, Jamal Foster",
+    "url": "meeting://design-review-2026-05-28",
+    "decision_log": {
+      "id": "DEC-MTG-3",
+      "title": "We'll adopt that sequencing.",
+      "decision": "We'll adopt that sequencing.",
+      "rationale": "Captured from meeting transcript; confirm with attendees.",
+      "alternatives_considered": [],
+      "decided_by": [
+        "Amara Osei",
+        "Jamal Foster",
+        "Lucia Ferreira",
+        "Priya Nair"
+      ],
+      "date": "2026-05-29",
+      "status": "draft",
+      "related_tickets": [],
+      "related_components": [],
+      "team": "Team Nova"
+    }
+  }
+]

@@ -49,8 +49,45 @@ def strip_mention(text: str) -> str:
     return re.sub(r"<@[A-Z0-9]+>", "", text).strip()
 
 
+def _load_meeting_notes() -> list[dict]:
+    import glob, json, yaml
+    with open("config.yaml") as f:
+        teams_dir = yaml.safe_load(f).get("data", {}).get("teams_dir", "./data/synthetic/teams")
+    notes = []
+    for path in glob.glob(os.path.join(teams_dir, "*", "meeting_notes.json")):
+        try:
+            with open(path) as f:
+                notes.extend(json.load(f))
+        except (OSError, ValueError):
+            continue
+    return notes
+
+
 def handle_query(text: str) -> str:
     q = text.lower()
+
+    # Action items from ingested meetings
+    if any(w in q for w in ["action item", "action items", "my actions", "what do i owe", "follow up", "follow-up", "to-do from", "todos from"]):
+        notes = _load_meeting_notes()
+        if not notes:
+            return "No meeting notes ingested yet. Import a transcript to capture action items."
+        teams = _match_teams(text)
+        lines = ["*📌 Action items from recent meetings*\n"]
+        count = 0
+        for n in notes:
+            if teams and n.get("team") not in teams:
+                continue
+            items = n.get("action_items", [])
+            if not items:
+                continue
+            lines.append(f"_{n.get('title')} ({n.get('team')})_")
+            for a in items:
+                who = a.get("owner") or "unassigned"
+                due = f" (due {a['due']})" if a.get("due") else ""
+                lines.append(f"  • *{who}*: {a.get('task')}{due}")
+                count += 1
+            lines.append("")
+        return "\n".join(lines) if count else "No action items found in ingested meetings."
 
     # Findability — where do I find X?
     if any(w in q for w in ["where do i find", "where is", "where can i find", "where are", "where's", "looking for", "find the"]):
@@ -285,6 +322,7 @@ def handle_query(text: str) -> str:
         "*SyncBot commands:*\n\n"
         "• `@syncbot who owns <component>` — find component owner\n"
         "• `@syncbot where do I find <thing>` — locate research, assets, files, docs\n"
+        "• `@syncbot action items for <team>` — open actions from ingested meetings\n"
         "• `@syncbot when does <team> ship` — upcoming deliverables\n"
         "• `@syncbot what was decided about <topic>` — search decision logs\n"
         "• `@syncbot scan for conflicts` — current drift and conflict report\n"

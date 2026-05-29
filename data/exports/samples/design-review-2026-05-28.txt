@@ -1,0 +1,14 @@
+Amara Osei: Thanks everyone for joining the cross-team design review. Today we need to settle the notification component situation.
+Jamal Foster: Right, so Team Horizon currently has our own NotificationBell that drifted from the library. It uses a different icon weight.
+Amara Osei: We've seen three different notification bells across the org now. We decided to standardize on Nova's canonical NotificationBell for everyone.
+Jamal Foster: Works for me. I'll update the Horizon Figma file to use Nova's component by Friday.
+Lucia Ferreira: Great. There's a risk here though — if Horizon swaps the component before we ship design system v3, the color tokens will change again and they'll have to redo it.
+Amara Osei: Good point. Let's go with waiting until v3 ships, then Horizon migrates. We'll adopt that sequencing.
+Priya Nair: From Team Phoenix's side, the AuthModal also uses the old Modal pattern. Can you confirm the new Modal is dev-ready?
+Lucia Ferreira: Yes, the new Modal is approved. Priya, you'll need to update AuthModal to the new tokens.
+Priya Nair: I will take that. I'll have the AuthModal updated by next Wednesday.
+Amara Osei: One more thing — Team Atlas needs to expose the notification count via the API for the bell to work. That's a dependency we should flag.
+Jamal Foster: Agreed. I'm a little worried Atlas isn't aware of this dependency yet.
+Amara Osei: Let's have someone sync with Atlas this week. Action item: I'll reach out to Jordan on the Atlas team by end of week.
+Lucia Ferreira: Last risk — the design review process itself. We keep making these decisions verbally and they never get documented. That's blocked our governance effort.
+Amara Osei: That's exactly why we're capturing this. Decision: we'll standardize on Nova components and document every cross-team design decision going forward.

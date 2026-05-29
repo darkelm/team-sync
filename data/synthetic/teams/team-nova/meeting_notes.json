@@ -1,0 +1,139 @@
+[
+  {
+    "id": "design-review-2026-05-28",
+    "title": "Design Review 2026 05 28",
+    "date": "2026-05-29",
+    "team": "Team Nova",
+    "participants": [
+      "Amara Osei",
+      "Jamal Foster",
+      "Lucia Ferreira",
+      "Priya Nair"
+    ],
+    "teams_mentioned": [
+      "Team Atlas",
+      "Team Horizon",
+      "Team Phoenix"
+    ],
+    "decisions": [
+      {
+        "id": "DEC-MTG-1",
+        "title": "We decided to standardize on Nova's canonical NotificationBell for everyone.",
+        "decision": "We decided to standardize on Nova's canonical NotificationBell for everyone.",
+        "rationale": "Captured from meeting transcript; confirm with attendees.",
+        "alternatives_considered": [],
+        "decided_by": [
+          "Amara Osei",
+          "Jamal Foster",
+          "Lucia Ferreira",
+          "Priya Nair"
+        ],
+        "date": "2026-05-29",
+        "status": "draft",
+        "related_tickets": [],
+        "related_components": [],
+        "team": "Team Nova"
+      },
+      {
+        "id": "DEC-MTG-2",
+        "title": "Let's go with waiting until v3 ships, then Horizon migrates.",
+        "decision": "Let's go with waiting until v3 ships, then Horizon migrates.",
+        "rationale": "Captured from meeting transcript; confirm with attendees.",
+        "alternatives_considered": [],
+        "decided_by": [
+          "Amara Osei",
+          "Jamal Foster",
+          "Lucia Ferreira",
+          "Priya Nair"
+        ],
+        "date": "2026-05-29",
+        "status": "draft",
+        "related_tickets": [],
+        "related_components": [],
+        "team": "Team Nova"
+      },
+      {
+        "id": "DEC-MTG-3",
+        "title": "We'll adopt that sequencing.",
+        "decision": "We'll adopt that sequencing.",
+        "rationale": "Captured from meeting transcript; confirm with attendees.",
+        "alternatives_considered": [],
+        "decided_by": [
+          "Amara Osei",
+          "Jamal Foster",
+          "Lucia Ferreira",
+          "Priya Nair"
+        ],
+        "date": "2026-05-29",
+        "status": "draft",
+        "related_tickets": [],
+        "related_components": [],
+        "team": "Team Nova"
+      }
+    ],
+    "action_items": [
+      {
+        "owner": null,
+        "task": "Today we need to settle the notification component situation.",
+        "due": null,
+        "quote": "Amara Osei: Today we need to settle the notification component situation."
+      },
+      {
+        "owner": "Jamal Foster",
+        "task": "I'll update the Horizon Figma file to use Nova's component by Friday.",
+        "due": "by Friday",
+        "quote": "Jamal Foster: I'll update the Horizon Figma file to use Nova's component by Friday."
+      },
+      {
+        "owner": null,
+        "task": "Can you confirm the new Modal is dev-ready?",
+        "due": null,
+        "quote": "Priya Nair: Can you confirm the new Modal is dev-ready?"
+      },
+      {
+        "owner": "Priya Nair",
+        "task": "Priya, you'll need to update AuthModal to the new tokens.",
+        "due": null,
+        "quote": "Lucia Ferreira: Priya, you'll need to update AuthModal to the new tokens."
+      },
+      {
+        "owner": "Priya Nair",
+        "task": "I will take that.",
+        "due": null,
+        "quote": "Priya Nair: I will take that."
+      },
+      {
+        "owner": "Priya Nair",
+        "task": "I'll have the AuthModal updated by next Wednesday.",
+        "due": "by next Wednesday",
+        "quote": "Priya Nair: I'll have the AuthModal updated by next Wednesday."
+      },
+      {
+        "owner": null,
+        "task": "One more thing \u2014 Team Atlas needs to expose the notification count via the API for the bell to work.",
+        "due": null,
+        "quote": "Amara Osei: One more thing \u2014 Team Atlas needs to expose the notification count via the API for the bell to work."
+      },
+      {
+        "owner": null,
+        "task": "Let's have someone sync with Atlas this week.",
+        "due": null,
+        "quote": "Amara Osei: Let's have someone sync with Atlas this week."
+      },
+      {
+        "owner": "Amara Osei",
+        "task": "Action item: I'll reach out to Jordan on the Atlas team by end of week.",
+        "due": "by end of week",
+        "quote": "Amara Osei: Action item: I'll reach out to Jordan on the Atlas team by end of week."
+      }
+    ],
+    "risks": [
+      "There's a risk here though \u2014 if Horizon swaps the component before we ship design system v3, the color tokens will change again and they'll have to redo it.",
+      "That's a dependency we should flag.",
+      "I'm a little worried Atlas isn't aware of this dependency yet.",
+      "Last risk \u2014 the design review process itself.",
+      "That's blocked our governance effort."
+    ],
+    "summary": "Design Review 2026 05 28 \u2014 3 decisions, 9 action items, 5 risks. Participants: Amara Osei, Jamal Foster, Lucia Ferreira, Priya Nair."
+  }
+]

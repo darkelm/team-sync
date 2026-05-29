@@ -15,11 +15,13 @@ class LocalConfluenceProvider(ConfluenceProvider):
             return self._pages
         for entry in os.scandir(self.teams_dir):
             if entry.is_dir():
-                path = os.path.join(entry.path, "confluence_pages.json")
-                if os.path.exists(path):
-                    with open(path) as f:
-                        for item in json.load(f):
-                            self._pages.append(ConfluencePage(**item))
+                # Curated docs + decisions captured from meeting transcripts
+                for fname in ("confluence_pages.json", "meeting_decisions.json"):
+                    path = os.path.join(entry.path, fname)
+                    if os.path.exists(path):
+                        with open(path) as f:
+                            for item in json.load(f):
+                                self._pages.append(ConfluencePage(**item))
         return self._pages
 
     def get_pages(self, space: Optional[str] = None, team: Optional[str] = None) -> list[ConfluencePage]:

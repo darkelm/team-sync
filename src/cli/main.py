@@ -215,8 +215,13 @@ def _slugify(team: str) -> str:
 def _detect_source(path: str) -> str:
     """Figure out what kind of export this is from the path itself."""
     import os
-    if os.path.isfile(path) and path.lower().endswith(".csv"):
-        return "jira"
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.importers.transcript import looks_like_transcript
+    if os.path.isfile(path):
+        if looks_like_transcript(path):
+            return "transcript"
+        if path.lower().endswith(".csv"):
+            return "jira"
     if os.path.isdir(path):
         if os.path.isdir(os.path.join(path, ".git")):
             return "github"
@@ -250,6 +255,23 @@ def _do_import(source: str, path: str, team: str, config: str):
         prs = import_github_clone(path, team, component_paths)
         out = write_team_json(prs, teams_dir, slug, "pull_requests.json")
         console.print(f"[green]✓[/green] {len(prs)} merged PRs → {out}")
+    elif source == "transcript":
+        import os, json
+        from src.importers.transcript import parse_transcript
+        from src.agent.meeting import MeetingAnalyzer
+        segments = parse_transcript(path)
+        title = os.path.splitext(os.path.basename(path))[0].replace("-", " ").replace("_", " ").title()
+        analyzer = MeetingAnalyzer(_get_providers(config))
+        notes = analyzer.analyze(segments, team, title)
+        # Persist meeting notes + searchable decision logs
+        os.makedirs(os.path.join(teams_dir, slug), exist_ok=True)
+        with open(os.path.join(teams_dir, slug, "meeting_decisions.json"), "w") as f:
+            json.dump(analyzer.to_confluence_pages(notes), f, indent=2, default=str)
+        write_team_json([notes], teams_dir, slug, "meeting_notes.json")
+        console.print(f"[green]✓[/green] Meeting analyzed: {len(notes.decisions)} decisions, "
+                      f"{len(notes.action_items)} action items, {len(notes.risks)} risks")
+        console.print("[dim]Decisions are now searchable via `syncbot decisions <topic>`.[/dim]\n")
+        console.print(analyzer.format_slack_summary(notes))
     else:
         console.print(f"[red]Couldn't tell what kind of export '{path}' is.[/red]")
         console.print("[dim]Expected: a .csv (Jira), a folder of .md/.html (Confluence), or a git clone (GitHub).[/dim]")
@@ -276,7 +298,10 @@ def import_cmd(
         console.print(f"[red]Couldn't recognize '{path}'.[/red] Expected a .csv, a folder of docs, or a git clone.")
         raise typer.Exit(1)
 
-    pretty = {"jira": "Jira tickets (CSV)", "confluence": "Confluence pages", "github": "GitHub merge history"}[source]
+    pretty = {
+        "jira": "Jira tickets (CSV)", "confluence": "Confluence pages",
+        "github": "GitHub merge history", "transcript": "Meeting transcript",
+    }[source]
     console.print(f"Detected: [cyan]{pretty}[/cyan]")
 
     if not team:
