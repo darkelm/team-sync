@@ -91,7 +91,23 @@ Beyond the system-of-record tools above, a lot of coordination signal lives in *
 | **Email** | Approvals, briefs, and external stakeholder decisions still flow here. | Brief/approval thread → index for Findability, link to owning team |
 | **Spreadsheets** (Google Sheets, Excel) | Roadmaps and trackers secretly live here more than anyone admits. | Tracker changes → reconcile against the canonical roadmap |
 
-> The standout to prioritize is **meeting transcripts** — it's where design decisions are densest and least captured, it's increasingly accessible via tools that already produce text exports (connectors-off friendly), and it feeds directly into our existing decision-log-gap detection.
+### ✅ Built: the source-agnostic trigger engine (`src/agent/events.py`)
+
+The proactive layer is built and **deliberately not code-centric**. A normalized `Event(type, subject, source, team)` is routed by `EventRouter` to the teams it actually affects, reusing the existing engines. Triggers span the whole org — code is just one:
+
+| Event type | What fires |
+|---|---|
+| `design.library_published` / `design.component_changed` | notify every team that uses that component (incl. via journeys) |
+| `research.study_added` | notify teams working in that problem space |
+| `roadmap.date_changed` / `delivery.date_changed` | notify dependent teams |
+| `work.created` (ticket/epic/initiative) | duplicate-work check + collaboration nudge |
+| `calendar.cross_team_sync` | auto-post a meeting briefing |
+| `meeting.transcript_added` | extract decisions/actions (see ingest) |
+| `code.merged` | dependency alert — *one* trigger among many |
+
+The **"ears"** are thin adapters that all produce Events and call `route()`: a webhook receiver (Figma/Jira/calendar/GitHub), a nightly snapshot diff, or manual (`syncbot simulate-event`, the MCP `emit_event` tool, or `@syncbot what happens if …`). Adding a new trigger source = emit an Event; no change to the brain.
+
+> The next standout signal source to wire is **meeting transcripts** — it's where design decisions are densest and least captured, it's increasingly accessible via tools that already produce text exports (connectors-off friendly), and it feeds directly into our existing decision-log-gap detection.
 
 ### Output / delivery channels (where we reach people)
 

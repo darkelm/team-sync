@@ -355,5 +355,29 @@ def refresh_manifest(
     console.print("\n[dim]Review and apply the changes you confirm, then bump last_verified.[/dim]")
 
 
+@app.command("simulate-event", help="Fire a trigger event and see who'd be notified (proactive engine).")
+def simulate_event(
+    event_type: str = typer.Argument(..., help="e.g. design.library_published, research.study_added, roadmap.date_changed, work.created"),
+    subject: str = typer.Option("", "--subject", "-s", help="What changed (component, study topic, ticket title…)"),
+    team: str = typer.Option("", "--team", "-t", help="Originating team, if known"),
+    send: bool = typer.Option(False, "--send", help="Actually post to Slack (else just preview)"),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """Source-agnostic: any signal can wake the system. This previews/dispatches one."""
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.agent.events import EventRouter, Event, TRIGGER_CATALOG
+    if event_type not in TRIGGER_CATALOG:
+        console.print(f"[yellow]Unknown event type. Known triggers:[/yellow]")
+        for k, v in TRIGGER_CATALOG.items():
+            console.print(f"  • [cyan]{k}[/cyan] — {v}")
+    router = EventRouter(_get_providers(config))
+    ev = Event(type=event_type, subject=subject, team=team, source="cli")
+    if send:
+        n = router.dispatch(ev)
+        console.print(f"[green]✓[/green] Dispatched — {n} notification(s) posted.")
+    else:
+        console.print(router.explain(ev))
+
+
 if __name__ == "__main__":
     app()

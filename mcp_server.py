@@ -140,5 +140,12 @@ def experience_principles() -> str:
     return _run("experience_principles")
 
 
+@mcp.tool()
+def emit_event(event_type: str, subject: str = "", team: str = "") -> str:
+    """Fire a trigger event and preview who would be proactively notified. Source-agnostic — any signal (design.library_published, research.study_added, roadmap.date_changed, work.created, code.merged, calendar.cross_team_sync, etc.) can wake the coordination engine, not just code changes."""
+    from src.agent.events import EventRouter, Event
+    return EventRouter(providers).explain(Event(type=event_type, subject=subject, team=team, source="mcp"))
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -39,6 +39,8 @@ from src.agent.health import HealthAssessor
 health = HealthAssessor(providers)
 from src.agent.strategy import StrategyLens
 strategy = StrategyLens(providers)
+from src.agent.events import EventRouter, Event
+router = EventRouter(providers)
 
 # Natural-language agent (Claude). Activates only if an API key is present;
 # otherwise the bot uses keyword matching (handle_query).
@@ -118,6 +120,32 @@ def handle_query(text: str) -> str:
             "_Ask `@syncbot help` for what I can do._",
         ]
         return "\n".join(lines)
+
+    # Proactive trigger preview — "what happens if X changes" (source-agnostic)
+    if q.startswith("simulate") or "what happens if" in q or "what would happen if" in q:
+        # Infer the event type from the phrasing; subject = a known component if present.
+        comp = None
+        for t in providers.manifests.get_all_teams():
+            for c in t.components.code + t.components.design:
+                if c.name.lower() in q:
+                    comp = c.name
+                    break
+            if comp:
+                break
+        if "research" in q or "study" in q:
+            ev = Event(type="research.study_added", subject=re.sub(r".*(research|study)\b", "", text, flags=re.I).strip(" :?.") or "new research")
+        elif comp and any(w in q for w in ["design", "library", "publish", "component", "updates the", "design system"]):
+            ev = Event(type="design.library_published", subject=comp, team="Team Nova")
+        elif re.search(r"\b(slips?|delay|delayed|roadmap|timeline|late|due date|ships? late|misses)\b", q):
+            teams = _match_teams(text)
+            ev = Event(type="roadmap.date_changed", subject=comp or "a deliverable", team=teams[0] if teams else "")
+        elif comp:
+            ev = Event(type="design.library_published", subject=comp, team="Team Nova")
+        else:
+            return ("Try: `@syncbot what happens if the design system updates DataTable` "
+                    "or `@syncbot what happens if Team Atlas slips the gateway migration`")
+        preview = router.explain(ev)
+        return preview + "\n\n_This is the proactive engine — any signal (design publish, new research, date slip, new work…) can trigger it, not just code._"
 
     # Experience strategy — journeys + principles (above components/screens)
     if "principle" in q or "experience vision" in q or "design vision" in q or ("aligned" in q and "vision" in q):
