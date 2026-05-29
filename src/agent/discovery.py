@@ -94,7 +94,35 @@ class ReuseRadar:
     def __init__(self, providers: Providers):
         self.p = providers
 
+    def _catalog(self, exclude_team: str = "") -> list[dict]:
+        """Flatten components + tickets into a catalog the AI path can rank by index."""
+        catalog = []
+        for team in self.p.manifests.get_all_teams():
+            if exclude_team and team.team == exclude_team:
+                continue
+            for c in team.components.code:
+                catalog.append({"kind": "component", "name": c.name, "team": team.team, "detail": c.description})
+            for c in team.components.design:
+                catalog.append({"kind": "design", "name": c.name, "team": team.team, "detail": c.description})
+        for tk in self.p.jira.get_tickets():
+            if exclude_team and tk.team == exclude_team:
+                continue
+            catalog.append({"kind": "ticket", "name": f"{tk.id}: {tk.title}", "team": tk.team, "detail": tk.status.value})
+        return catalog
+
     def search(self, description: str, exclude_team: str = "", threshold: float = 0.2) -> list[ReuseMatch]:
+        # AI semantic matching when a key is present; Jaccard otherwise / on failure. Same ReuseMatch shape.
+        from .ai_enhance import ai_available
+        if ai_available():
+            try:
+                from .ai_enhance import semantic_reuse
+                catalog = self._catalog(exclude_team)[:60]
+                hits = semantic_reuse(description, catalog)
+                return [ReuseMatch(item["kind"], item["name"], item["team"], 0.85, [], reason)
+                        for item, reason in hits][:8]
+            except Exception as e:
+                print(f"[reuse] AI matching failed, using keyword overlap: {e}", flush=True)
+
         matches: list[ReuseMatch] = []
 
         # Components (code + design) across teams

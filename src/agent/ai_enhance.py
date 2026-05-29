@@ -88,3 +88,52 @@ def extract_meeting(
     ]
     actions = [ActionItem(owner=a.owner, task=a.task, due=a.due) for a in data.action_items]
     return decisions, actions, list(data.risks)
+
+
+# ── Semantic reuse matching (structured output) ───────────────────────────────
+
+class _AIReuseHit(BaseModel):
+    index: int
+    reason: str
+
+class _AIReuseResult(BaseModel):
+    matches: list[_AIReuseHit]
+
+
+def semantic_reuse(description: str, catalog: list[dict]) -> list[tuple[dict, str]]:
+    """Claude judges which catalog items are *semantically* similar to `description`.
+
+    `catalog` items are dicts with name/kind/team/detail. Returns (item, reason)
+    pairs grounded by index (so names can't be hallucinated). Raises on failure.
+    """
+    import anthropic
+
+    lines = [
+        f"{i}. [{c.get('kind')}] {c.get('name')} (owned by {c.get('team')}) — {c.get('detail','')}"
+        for i, c in enumerate(catalog)
+    ]
+    prompt = (
+        "A team is about to build or research the following:\n"
+        f"\"{description}\"\n\n"
+        "Here is a catalog of existing components, designs, and work items across the org. "
+        "Return the indices of items that are SEMANTICALLY similar — i.e. solve the same problem "
+        "even if named differently (e.g. 'alert badge' ≈ 'notification bell'). For each, give a "
+        "one-line reason. Only include genuine matches; return an empty list if nothing is close.\n\n"
+        + "\n".join(lines)
+    )
+
+    client = anthropic.Anthropic()
+    resp = client.messages.parse(
+        model=MODEL,
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=_AIReuseResult,
+    )
+    data = resp.parsed_output
+    if data is None:
+        raise ValueError("AI reuse matching returned no parsed output")
+    out = []
+    for hit in data.matches:
+        if 0 <= hit.index < len(catalog):
+            out.append((catalog[hit.index], hit.reason))
+    return out

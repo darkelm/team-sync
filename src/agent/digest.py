@@ -10,6 +10,8 @@ class DigestGenerator:
     def __init__(self, providers: Providers):
         self.p = providers
         self.detector = DriftDetector(providers)
+        from .preferences import NotificationPreferences
+        self.prefs = NotificationPreferences()
 
     def _design_system_team(self) -> Optional[str]:
         """Detect which team owns the design system library — no hardcoded names.
@@ -31,24 +33,32 @@ class DigestGenerator:
         if not team:
             raise ValueError(f"Team '{team_name}' not found")
 
+        prefs = self.prefs.get(team_name)
         week_of = date.today()
         recent_prs = self.p.github.get_recent_prs(days=7)
         all_issues = self.detector.run_all()
-        team_issues = [i for i in all_issues if team_name in i.teams_involved]
-        predictions = [c for c in self.detector.predict_conflicts() if team_name in c.teams_involved]
+        team_issues = [i for i in all_issues if team_name in i.teams_involved
+                       and self.prefs.severity_ok(team_name, i.severity.value)]
+        predictions = [c for c in self.detector.predict_conflicts()
+                       if team_name in c.teams_involved
+                       and self.prefs.severity_ok(team_name, c.severity.value)]
+
+        show_dev = prefs["sections"].get("dev", True)
+        show_design = prefs["sections"].get("design", True)
 
         # Dev updates: PRs from dependencies that might affect this team
         dep_teams = [d.team for d in team.dependencies]
         dep_prs = [p for p in recent_prs if p.team in dep_teams]
-        dev_updates = [f"[{p.team}] Merged: {p.title}" for p in dep_prs]
+        dev_updates = [f"[{p.team}] Merged: {p.title}" for p in dep_prs] if show_dev else []
 
         # Design updates: Figma drift issues affecting this team
         design_issues = [i for i in team_issues if i.type == "design_drift"]
-        design_updates = [f"Design drift detected: {i.title}" for i in design_issues]
+        design_updates = ([f"Design drift detected: {i.title}" for i in design_issues]
+                          if show_design else [])
 
         # Check for design system updates from whichever team owns the library
         ds_team = self._design_system_team()
-        if ds_team and ds_team != team_name:
+        if show_design and ds_team and ds_team != team_name:
             for pr in (p for p in recent_prs if p.team == ds_team):
                 design_updates.append(f"[Design System] {ds_team} merged: {pr.title} — review your Figma files")
 
@@ -117,9 +127,30 @@ class DigestGenerator:
 
         return "\n".join(lines)
 
-    def post_all_digests(self) -> None:
-        teams = self.p.manifests.get_all_teams()
-        for team in teams:
-            digest = self.generate_for_team(team.team)
-            message = self.format_slack_message(digest)
-            self.p.slack.post_digest(team.slack_channel, message)
+    def _signature(self, digest: TeamDigest) -> str:
+        """Stable fingerprint of a digest's actionable content — for the quality gate."""
+        import hashlib
+        parts = (
+            sorted(i.id for i in digest.open_conflicts)
+            + sorted(c.id for c in digest.predicted_conflicts)
+            + sorted(digest.dependency_changes)
+        )
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+    def post_all_digests(self, force: bool = False) -> None:
+        """Post each team's digest, respecting pause and the quality gate.
+
+        force=True bypasses the gate (for on-demand `post digests`).
+        """
+        for team in self.p.manifests.get_all_teams():
+            name = team.team
+            if self.prefs.is_paused(name):
+                print(f"[digest] {name} is paused — skipping.", flush=True)
+                continue
+            digest = self.generate_for_team(name)
+            sig = self._signature(digest)
+            if not force and not self.prefs.changed_since_last(name, sig):
+                print(f"[digest] {name} — nothing new since last digest, skipping.", flush=True)
+                continue
+            self.p.slack.post_digest(team.slack_channel, self.format_slack_message(digest))
+            self.prefs.record_signature(name, sig)

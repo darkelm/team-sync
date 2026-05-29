@@ -99,13 +99,14 @@ Uses Anthropic **structured outputs** (`messages.parse()` with Pydantic) so Clau
 
 ---
 
-## Phase 4 — Notification tuning (kills barrier #4, fatigue)
+## Phase 4 — Notification tuning (kills barrier #4, fatigue) ✅ BUILT
 
-- **Per-team digest preferences:** cadence, sections, and a **severity threshold** ("only ping me on high/critical").
-- **Suppress empty/noisy sections** (partly done) so digests are signal-dense.
-- **Snooze / opt-out / @-only-on-critical** controls via a Slack command.
-- **Quality gate:** a digest only sends if it has something genuinely new since last time.
-- **Batch API (capability multiplier):** run the scheduled/bulk AI work — many-team digests, nightly drift summaries, bulk transcript processing — through Anthropic's Batch API at 50% cost. Only matters once digests are AI-written and running at scale; pure cost optimization for the proactive layer.
+- **Per-team preferences** ✅ — `src/agent/preferences.py` stores per-team settings in `data/notification_prefs.json` (tunable from Slack, no manifest edits).
+- **Severity threshold** ✅ — `@syncbot only alert <team> on high` filters digest issues/predictions below the chosen level.
+- **Pause / resume** ✅ — `@syncbot mute digests for <team>` / `resume digests for <team>`; paused teams are skipped.
+- **Section toggles** ✅ — dev/design sections can be turned off per team.
+- **Quality gate** ✅ — a digest only sends if its actionable content changed since the last one (`post_all_digests` skips no-change teams; on-demand `post digests` forces send).
+- **Next — Batch API (capability multiplier):** run scheduled/bulk AI work (many-team digests, nightly drift summaries) through Anthropic's Batch API at 50% cost once digests are AI-written and running at scale.
 
 ---
 

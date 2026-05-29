@@ -89,6 +89,23 @@ def _load_meeting_notes() -> list[dict]:
 def handle_query(text: str) -> str:
     q = text.lower()
 
+    # Notification preferences — pause/resume/severity (Phase 4 tuning)
+    if any(w in q for w in ["mute", "pause digest", "snooze", "resume digest", "unmute",
+                            "only ping", "only alert", "only notify", "digest severity", "set severity"]):
+        teams = _match_teams(text)
+        if not teams:
+            return "Which team's notifications? e.g. `@syncbot mute digests for Team Horizon` or `@syncbot only alert Team Atlas on high`"
+        target = teams[0]
+        prefs = digest_gen.prefs
+        if any(w in q for w in ["resume", "unmute"]):
+            return prefs.resume(target)
+        if any(w in q for w in ["mute", "pause", "snooze"]):
+            return prefs.pause(target)
+        for level in ("critical", "high", "medium", "low"):
+            if level in q:
+                return prefs.set_severity(target, level)
+        return "Tell me a level (low/medium/high/critical), e.g. `only alert Team Atlas on high`."
+
     # Action items from ingested meetings
     if any(w in q for w in ["action item", "action items", "my actions", "what do i owe", "follow up", "follow-up", "to-do from", "todos from"]):
         notes = _load_meeting_notes()
@@ -250,7 +267,7 @@ def handle_query(text: str) -> str:
     # Post digests to all team channels on demand
     if any(w in q for w in ["post digest", "send digest", "digest all", "post all", "broadcast"]):
         teams = providers.manifests.get_all_teams()
-        digest_gen.post_all_digests()
+        digest_gen.post_all_digests(force=True)
         return f"Posted weekly digests to {len(teams)} team channels."
 
     # Scan / conflicts
@@ -358,6 +375,8 @@ def handle_query(text: str) -> str:
         "• `@syncbot is <team>'s design in sync` — Figma drift check\n"
         "• `@syncbot digest for <team>` — weekly digest preview\n"
         "• `@syncbot post digests` — send digests to all team channels now\n"
+        "• `@syncbot mute digests for <team>` / `resume digests for <team>` — pause control\n"
+        "• `@syncbot only alert <team> on high` — set digest severity threshold\n"
         "• `@syncbot dependencies for <team>` — dependency map"
     )
 
