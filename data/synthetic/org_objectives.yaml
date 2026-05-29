@@ -1,0 +1,16 @@
+# Company-level objectives for the quarter. Team goals should ladder up to these.
+# Each objective has keywords used to match team goals (until the Claude agent
+# enables semantic matching).
+objectives:
+  - id: OBJ-1
+    title: Ship a unified, compliant authentication platform
+    keywords: [oauth, pkce, auth, authentication, session, token, compliance, security, expiry]
+  - id: OBJ-2
+    title: Modernize the data platform for real-time experiences
+    keywords: [pipeline, real-time, realtime, data, api, gateway, kafka, streaming, latency]
+  - id: OBJ-3
+    title: Achieve one consistent design system across all products
+    keywords: [design system, tokens, component, library, drift, consistency, figma, governance]
+  - id: OBJ-4
+    title: Improve developer and team productivity
+    keywords: [ci, cd, deployment, pipeline, portal, onboarding, tooling, self-service]

@@ -1,5 +1,22 @@
 [
   {
+    "id": "HRZ-311",
+    "title": "Revamp self-service onboarding flow for new users",
+    "description": "Redesign the new-user onboarding wizard with self-service setup steps, guided tours, and a getting-started checklist. Goal is to reduce time-to-first-value for new users onboarding to the product.",
+    "status": "in_progress",
+    "priority": "medium",
+    "assignee": "Jamal Foster",
+    "team": "Team Horizon",
+    "labels": ["onboarding", "self-service", "design"],
+    "due_date": "2026-07-10",
+    "created_at": "2026-05-24T09:00:00Z",
+    "updated_at": "2026-05-28T09:00:00Z",
+    "linked_tickets": [],
+    "components": ["onboarding"],
+    "epic": "Onboarding v2",
+    "planned_quarter": "Q3-2026"
+  },
+  {
     "id": "HRZ-301",
     "title": "Update client-side token storage for new 24hr expiry",
     "description": "Phoenix (PHX-103) is reducing token TTL from 72h to 24h for compliance. Horizon currently stores tokens in localStorage and silently fails on expiry. Need to add refresh logic.",

@@ -160,9 +160,15 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] Proactive: weekly digest scheduler, conflict prediction, cross-team meeting briefings (all live in Slack)
 - [x] **Connectors-off import path** — Jira CSV, Confluence HTML/MD, GitHub clone → normalized JSON (the enterprise wedge; see Connectors-off mode)
 - [x] Competitive analysis + strategy (POSITIONING.md)
+- [x] Research-backed capability roadmap + trigger map (IDEAS.md)
+- [x] **Collaborator Discovery** — finds teams doing related work who aren't connected (live in Slack)
+- [x] **Reuse Radar** — "has anyone already built/researched this?" before you start (live in Slack)
+- [x] **Strategic Alignment Checker** — flags goals not laddering up to company objectives (live in Slack)
 
 ### Next
-- [ ] **Claude agent** — natural-language understanding (needs Anthropic API key; replaces keyword matching — highest-leverage upgrade)
+- [ ] **Claude agent** — natural-language understanding (needs Anthropic API key; replaces keyword matching — highest-leverage upgrade; also unlocks semantic duplicate-work detection)
+- [ ] Findability Locator — "where do I find X" (resource registry per team)
+- [ ] New triggers: calendar-driven briefings, Figma webhook (see IDEAS.md trigger map)
 - [ ] **Deploy to Railway** — bot currently only runs while a local terminal session is alive; deploy as a background worker for 24/7 uptime (config + guide ready in DEPLOY.md, needs browser steps + rotated tokens)
 - [ ] GitHub live provider — activate (PAT needed)
 - [ ] Figma live provider — activate (access token needed)

@@ -22,12 +22,17 @@ from src.agent.detector import DriftDetector
 from src.agent.digest import DigestGenerator
 from src.agent.briefing import BriefingGenerator
 from src.agent.scheduler import DigestScheduler
+from src.agent.discovery import CollaboratorDiscovery, ReuseRadar
+from src.agent.alignment import AlignmentChecker
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
 providers = Providers("config.yaml")
 detector = DriftDetector(providers)
 digest_gen = DigestGenerator(providers)
 briefing_gen = BriefingGenerator(providers)
+discovery = CollaboratorDiscovery(providers)
+reuse_radar = ReuseRadar(providers)
+alignment = AlignmentChecker(providers)
 
 
 def _match_teams(text: str) -> list[str]:
@@ -91,6 +96,60 @@ def handle_query(text: str) -> str:
                 f"<{p.url}|View in Confluence>"
             )
         return "\n\n".join(lines)
+
+    # Collaborator discovery — who should be talking
+    if any(w in q for w in ["who should i talk", "who should we talk", "collaborat", "discover", "who else is working", "connect me", "missing"]):
+        suggestions = discovery.find_suggestions()
+        unlinked = [s for s in suggestions if not s.already_linked]
+        if not suggestions:
+            return "No related-work connections detected right now."
+        lines = ["*🔗 Collaboration opportunities*\n"]
+        if unlinked:
+            lines.append("*Teams doing related work but NOT connected:*")
+            for s in unlinked[:5]:
+                lines.append(f"• *{s.team_a}* ↔ *{s.team_b}*\n    {s.evidence[0]}")
+        linked = [s for s in suggestions if s.already_linked]
+        if linked:
+            lines.append("\n_Already connected (keep in sync):_ "
+                         + ", ".join(f"{s.team_a}↔{s.team_b}" for s in linked[:4]))
+        return "\n".join(lines)
+
+    # Reuse radar — has someone already built this?
+    if any(w in q for w in ["already built", "already exist", "reuse", "anyone built", "has anyone", "similar to", "already solved", "already designed"]):
+        # crude payload extraction: text after common lead-ins
+        import re as _re
+        desc = _re.sub(r".*(built|exist[s]?|designed|solved|similar to|reuse|anyone|has anyone)\b", "", text, flags=_re.I).strip(" ?.")
+        desc = desc or text
+        matches = reuse_radar.search(desc)
+        if not matches:
+            return f"Nothing similar found for “{desc}”. Looks net-new — good to proceed."
+        lines = [f"*♻️ Possible existing work for “{desc}”:*\n"]
+        for m in matches[:6]:
+            kind = {"component": "🧩 component", "design": "🎨 design", "ticket": "🎫 ticket"}.get(m.kind, m.kind)
+            lines.append(f"• {kind} *{m.name}* — owned by {m.owning_team} "
+                         f"(match: {', '.join(m.overlap[:4])})")
+        lines.append("\n_Check with the owning team before building from scratch._")
+        return "\n".join(lines)
+
+    # Strategic alignment
+    if any(w in q for w in ["alignment", "aligned", "objective", "strategy", "strategic", "okr", "company goal", "ladder"]):
+        report = alignment.run()
+        lines = ["*🎯 Strategic alignment check*\n"]
+        if report.overlaps:
+            lines.append("*Objectives multiple teams are pursuing (coordinate):*")
+            for title, oid, teams in report.overlaps:
+                lines.append(f"• {title} → {', '.join(teams)}")
+            lines.append("")
+        if report.orphans:
+            lines.append("*⚠️ Goals not linked to any company objective:*")
+            for o in report.orphans[:6]:
+                lines.append(f"• [{o.team}] {o.goal}")
+            lines.append("")
+        coverage = len(report.linked)
+        total = coverage + len(report.orphans)
+        pct = round(100 * coverage / total) if total else 100
+        lines.append(f"_{coverage}/{total} team goals ({pct}%) ladder up to a company objective._")
+        return "\n".join(lines)
 
     # Cross-team meeting briefing
     if any(w in q for w in ["prep", "brief", "briefing", "meeting", "sync with", "agenda"]):
@@ -213,6 +272,9 @@ def handle_query(text: str) -> str:
         "• `@syncbot what was decided about <topic>` — search decision logs\n"
         "• `@syncbot scan for conflicts` — current drift and conflict report\n"
         "• `@syncbot predict conflicts` — forecast collisions in planned work\n"
+        "• `@syncbot who should I talk to` — discover teams doing related work\n"
+        "• `@syncbot has anyone built <thing>` — reuse radar before you start\n"
+        "• `@syncbot check alignment` — goals laddering up to company objectives\n"
         "• `@syncbot prep me for a sync with <team> and <team>` — meeting briefing\n"
         "• `@syncbot get me up to speed on <team>` — team briefing\n"
         "• `@syncbot is <team>'s design in sync` — Figma drift check\n"
