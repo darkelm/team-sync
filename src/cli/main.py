@@ -199,5 +199,75 @@ def scan(
         ))
 
 
+import_app = typer.Typer(help="Import exports (no API access needed) into normalized provider JSON.")
+app.add_typer(import_app, name="import")
+
+
+def _teams_dir(config: str) -> str:
+    import yaml
+    with open(config) as f:
+        cfg = yaml.safe_load(f)
+    return cfg.get("data", {}).get("teams_dir", "./data/synthetic/teams")
+
+
+@import_app.command("jira")
+def import_jira(
+    csv_path: str = typer.Argument(..., help="Path to a Jira CSV export"),
+    team: str = typer.Option(..., "--team", help="Team name to attach these tickets to"),
+    slug: str = typer.Option(..., "--slug", help="Team folder slug, e.g. team-phoenix"),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """Import a Jira CSV export → jira_tickets.json."""
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.importers.jira_csv import import_jira_csv
+    from src.importers.writer import write_team_json
+
+    tickets = import_jira_csv(csv_path, team)
+    path = write_team_json(tickets, _teams_dir(config), slug, "jira_tickets.json")
+    console.print(f"[green]✓[/green] Imported {len(tickets)} tickets → {path}")
+
+
+@import_app.command("confluence")
+def import_confluence(
+    folder: str = typer.Argument(..., help="Folder of exported Confluence pages (.html/.md)"),
+    team: str = typer.Option(..., "--team", help="Team name"),
+    slug: str = typer.Option(..., "--slug", help="Team folder slug"),
+    space: str = typer.Option("", "--space", help="Confluence space key"),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """Import a Confluence HTML/Markdown export → confluence_pages.json."""
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.importers.confluence_export import import_confluence_export
+    from src.importers.writer import write_team_json
+
+    pages = import_confluence_export(folder, team, space)
+    decisions = sum(1 for p in pages if p.decision_log)
+    path = write_team_json(pages, _teams_dir(config), slug, "confluence_pages.json")
+    console.print(f"[green]✓[/green] Imported {len(pages)} pages ({decisions} decision logs) → {path}")
+
+
+@import_app.command("github")
+def import_github(
+    repo_path: str = typer.Argument(..., help="Path to a local Git clone"),
+    team: str = typer.Option(..., "--team", help="Team name"),
+    slug: str = typer.Option(..., "--slug", help="Team folder slug"),
+    days: int = typer.Option(90, help="How many days of merge history to import"),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """Import merged PRs from a local Git clone → pull_requests.json."""
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.importers.github_clone import import_github_clone
+    from src.importers.writer import write_team_json
+
+    # Map component paths from the team manifest if present
+    providers = _get_providers(config)
+    manifest = providers.manifests.get_team(team)
+    component_paths = {c.name: c.path for c in manifest.components.code} if manifest else {}
+
+    prs = import_github_clone(repo_path, team, component_paths, days)
+    path = write_team_json(prs, _teams_dir(config), slug, "pull_requests.json")
+    console.print(f"[green]✓[/green] Imported {len(prs)} merged PRs → {path}")
+
+
 if __name__ == "__main__":
     app()

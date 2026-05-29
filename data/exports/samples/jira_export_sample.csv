@@ -1,0 +1,5 @@
+Issue key,Summary,Description,Status,Priority,Assignee,Created,Updated,Due Date,Labels,Labels,Component/s,Component/s,Epic Link
+GAPTT-1,Set up design token pipeline,Establish the shared token export from Figma to code,In Progress,High,Ty Shaw,12/May/26 9:00 AM,27/May/26 2:30 PM,15/Jun/26,design-system,tokens,tokens,design-system,Design System v1
+GAPTT-2,Build component usage dashboard,Track which teams use which shared components,To Do,Medium,Ty Shaw,14/May/26 10:00 AM,20/May/26 11:00 AM,30/Jun/26,analytics,,dashboard,,Design System v1
+GAPTT-3,Audit notification patterns across squads,Three teams built different notification UIs; consolidate,To Do,Highest,,18/May/26 8:00 AM,28/May/26 4:00 PM,01/Jul/26,cross-team,drift,notifications,,Design Governance
+GAPTT-4,Migrate legacy buttons to shared library,Remove local Button overrides,Done,Low,Ty Shaw,01/Apr/26 9:00 AM,10/May/26 5:00 PM,,tech-debt,design-system,button,,Design System v1

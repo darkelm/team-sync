@@ -157,8 +157,12 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] Slack bot — LIVE and responding (`@syncbot scan for conflicts` works in workspace PrototypeToolsPilot)
 - [x] Live Jira + Confluence providers hardened for empty/restricted instances
 - [x] Cloud deployment config ready (Railway/Render/Fly — see DEPLOY.md)
+- [x] Proactive: weekly digest scheduler, conflict prediction, cross-team meeting briefings (all live in Slack)
+- [x] **Connectors-off import path** — Jira CSV, Confluence HTML/MD, GitHub clone → normalized JSON (the enterprise wedge; see Connectors-off mode)
+- [x] Competitive analysis + strategy (POSITIONING.md)
 
 ### Next
+- [ ] **Claude agent** — natural-language understanding (needs Anthropic API key; replaces keyword matching — highest-leverage upgrade)
 - [ ] **Deploy to Railway** — bot currently only runs while a local terminal session is alive; deploy as a background worker for 24/7 uptime (config + guide ready in DEPLOY.md, needs browser steps + rotated tokens)
 - [ ] GitHub live provider — activate (PAT needed)
 - [ ] Figma live provider — activate (access token needed)
@@ -211,6 +215,25 @@ providers:
 
 ### Slack app setup
 Use the manifest at `slack/manifest.json` — paste into `api.slack.com/apps` → Create App → From Manifest.
+
+---
+
+## Connectors-off mode (the enterprise wedge)
+
+The differentiator: SyncBot works **before IT approves a single API connector**, using the exports anyone can pull today.
+
+```bash
+# Jira: Issue Navigator → Export → CSV
+syncbot import jira export.csv --team "Team Phoenix" --slug team-phoenix
+
+# Confluence: Space Settings → Export → HTML (unzip), or any folder of .md/.html
+syncbot import confluence ./phoenix-space --team "Team Phoenix" --slug team-phoenix --space PHX
+
+# GitHub: any local clone — reads merge history via git log, no token
+syncbot import github ../phoenix-repo --team "Team Phoenix" --slug team-phoenix --days 90
+```
+
+Each importer normalizes the export into the same JSON the local providers read, so every feature (drift, conflicts, digests, briefings) works identically — no live access required. When connectors are eventually approved, flip the provider to `live` and the same features run against the API instead.
 
 ---
 
