@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 import typer
@@ -309,6 +310,60 @@ def import_cmd(
 
     console.print(f"Team: [cyan]{team}[/cyan]  →  folder [dim]{_slugify(team)}[/dim]\n")
     _do_import(source, path, team, config)
+
+
+@app.command("build-manifest", help="Draft a team.yaml from whatever sources you have (repo, CODEOWNERS, roster CSV, Jira CSV, transcript).")
+def build_manifest(
+    sources: list[str] = typer.Argument(None, help="Any mix of: a repo path, CODEOWNERS, a roster/Jira CSV, a transcript."),
+    team: str = typer.Option(None, "--team", "-t", help="Team name."),
+    out: str = typer.Option(None, "--out", "-o", help="Write the draft here (default: print)."),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """
+    Multi-source manifest builder. Examples:
+
+      syncbot build-manifest ../their-repo roster.csv --team "Payments"
+      syncbot build-manifest ../repo design-review.txt --team "Payments" -o data/imported/teams/payments/team.yaml
+      syncbot build-manifest            # guided wizard
+    """
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.builder.builder import ManifestBuilder
+
+    if not sources:
+        console.print("[bold]Manifest builder[/bold] [dim](point me at any sources you have)[/dim]\n")
+        raw = typer.prompt("Source paths (space-separated: repo, CODEOWNERS, roster.csv, transcript…)")
+        sources = raw.split()
+    if not team:
+        team = typer.prompt("Team name")
+
+    # known teams help the transcript adapter spot dependencies
+    known = []
+    try:
+        known = [t.team for t in _get_providers(config).manifests.get_all_teams()]
+    except Exception:
+        pass
+
+    builder = ManifestBuilder(team, known_teams=known)
+    for s in sources:
+        builder.add_source(s)
+    result = builder.build()
+
+    console.print(f"\n[green]Drafted manifest for[/green] [cyan]{team}[/cyan] "
+                  f"[dim]using: {', '.join(result.sources_used) or 'no recognized sources'}[/dim]")
+    if result.conflicts:
+        console.print(f"[yellow]⚠ Conflicts to resolve: {', '.join(result.conflicts)}[/yellow]")
+    if result.gaps:
+        console.print(f"[yellow]Gaps to fill (no source found): {', '.join(result.gaps)}[/yellow]")
+
+    if out:
+        os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+        with open(out, "w") as f:
+            f.write(result.yaml_text)
+        console.print(f"\n[green]✓[/green] Draft written to {out}")
+        console.print("[dim]Review the comments, confirm inferred fields, fill TODOs, then `syncbot validate`.[/dim]")
+    else:
+        console.print("")
+        print(result.yaml_text)
 
 
 if __name__ == "__main__":

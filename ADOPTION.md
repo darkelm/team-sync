@@ -18,9 +18,11 @@ The product capability is ahead of the adoption ergonomics. The path from "insta
 
 ---
 
-## Phase 1 — Multi-Source Manifest Builder (kills barrier #1)
+## Phase 1 — Multi-Source Manifest Builder (kills barrier #1) ✅ BUILT
 
 **Goal:** turn "hand-write a YAML file" into "point me at whatever you have, I'll draft it, you correct it."
+
+**Status:** Built. `syncbot build-manifest <sources...> --team "X"` fuses repo structure, git history, CODEOWNERS, roster CSV, Jira CSV, and meeting transcripts into a provenance-annotated draft `team.yaml`. Explicit sources beat inferred; gaps flagged as TODOs. Adapters for Confluence/Figma/Slack are the next additions.
 
 ### Source adapters (use any subset that exists)
 Each adapter extracts candidate manifest fields *with provenance and confidence*. The builder fuses them. Ranked by how authoritative each signal is:

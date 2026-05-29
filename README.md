@@ -4,6 +4,15 @@ Keeps design and dev teams in sync on large projects. Detects drift, predicts co
 
 Built to prove out with synthetic data first, then swap in real integrations via a provider adapter pattern (one config line per integration).
 
+### Documentation map
+- **README** (this file) — the vision: what it does, the 5 layers, architecture, status
+- **[IDEAS.md](IDEAS.md)** — research-backed capability roadmap + the trigger/channel map
+- **[POSITIONING.md](POSITIONING.md)** — competitive landscape and strategy
+- **[ADOPTION.md](ADOPTION.md)** — the plan to remove pilot barriers (manifest builder, freshness, NLU, fatigue, hosting)
+- **[DEPLOY.md](DEPLOY.md)** — cloud deployment (Railway/Render/Fly)
+
+> How they fit: README is the *what*, ADOPTION is the *how people start*. The Manifest Builder (ADOPTION Phase 1) is the on-ramp to **Layer 1 — Foundation** below; everything else builds on it.
+
 ---
 
 ## The Problem
@@ -170,6 +179,7 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] Expanded trigger map incl. meeting transcripts, whiteboards, analytics, customer feedback (IDEAS.md)
 
 - [x] **Meeting-transcript ingestion** — parses VTT/SRT/TXT, extracts decisions/action items/cross-team flags/risks; decisions become searchable (closes the "decided verbally, lost forever" gap)
+- [x] **Multi-Source Manifest Builder** (ADOPTION Phase 1) — fuses repo/git/CODEOWNERS/roster/Jira/transcript into a provenance-annotated draft `team.yaml`; kills the cold-start barrier
 
 ### Next
 - [ ] **Claude agent** — natural-language understanding (needs Anthropic API key; replaces keyword matching — highest-leverage upgrade; also unlocks semantic duplicate-work detection AND far better transcript extraction)
@@ -227,6 +237,36 @@ providers:
 
 ### Slack app setup
 Use the manifest at `slack/manifest.json` — paste into `api.slack.com/apps` → Create App → From Manifest.
+
+---
+
+## Starting on a new engagement — the Manifest Builder
+
+The fastest path from zero to working. Instead of hand-writing a `team.yaml`, point the builder at **whatever the client has** — it fuses every source, shows its provenance, and drafts a reviewable manifest. Works with any subset (a repo alone is enough; more sources = sharper draft).
+
+```bash
+# Any mix of: a repo, a CODEOWNERS file, a roster/Jira CSV, a meeting transcript
+syncbot build-manifest ../client-repo roster.csv design-review.txt --team "Payments" \
+  -o data/imported/teams/payments/team.yaml
+
+# Or guided:
+syncbot build-manifest
+```
+
+The draft annotates every field with where it came from and how confident it is, and lists `TODO`s for anything no source covered (goals, strategy):
+
+```yaml
+owner:
+  name: Dana Whitfield   # roster role: Design Lead [roster]  ← explicit beats inferred
+members:
+  - name: Ty Shaw        # 100% of recent commits [git]
+components:
+  code:
+    - name: auth         # from repo folder src/auth [repo]
+quarter_goals: []        # TODO: ask the team (strategy — no source can infer this)
+```
+
+Review it, confirm inferred fields, fill the `TODO`s, then `syncbot validate`. See [ADOPTION.md](ADOPTION.md) for the full multi-source design.
 
 ---
 
