@@ -4,6 +4,8 @@ The product capability is ahead of the adoption ergonomics. The path from "insta
 
 **Consultancy constraint (drives the whole design):** every engagement has a *different* mix of tools. Sometimes there's no Jira. Sometimes only a repo and a Confluence space. Sometimes only meeting recordings and a roster spreadsheet. So nothing can depend on a single source — the system must **fuse whatever is available, degrade gracefully, and show its work**.
 
+**Guiding principle — AI-optional architecture:** the engines are the product. Every capability has a working **non-AI implementation** (deterministic code or heuristics); AI is an *enhancement on top*, never the only path. AI supercharges the system two ways — a natural-language interface on the front, and (where added) a quality lift to the heuristics that returns the **same schema** the non-AI path produces. The system also supercharges AI back: it is the grounding layer that keeps any model honest. No feature may live only in the AI path.
+
 ---
 
 ## The five barriers (ranked)
@@ -15,6 +17,8 @@ The product capability is ahead of the adoption ergonomics. The path from "insta
 | 3 | Brittle NLU + command discoverability | 🟠 High |
 | 4 | Notification fatigue | 🟠 High |
 | 5 | Hosting + IT/Slack approval | 🟡 Medium |
+
+> Phases 1–5 remove adoption barriers. Phases 3.5 and 6 are **capability multipliers** drawn from Anthropic's current model guidance — woven in where they reinforce the principle above rather than bolted on at the end.
 
 ---
 
@@ -79,7 +83,19 @@ Each adapter extracts candidate manifest fields *with provenance and confidence*
 - **Claude agent** ✅ — Opus 4.8 with adaptive thinking, prompt caching on the system+tools prefix, and all 14 capabilities exposed as tools. Activates automatically when `ANTHROPIC_API_KEY` is set; the bot falls back to keyword matching (and on any agent error) otherwise. Set the key — no other change needed. Also the path to better transcript extraction and semantic duplicate detection.
 - **Bot self-introduction** ✅ — posts a short "here's what I can do" with example questions when added to a channel. Solves discovery.
 - **Graceful fallback** ✅ — agent errors fall back to keyword answers rather than dead-ending.
-- **Next:** richer "I don't know but here's who might" responses and per-answer provenance/freshness citations.
+- **Next:** richer "I don't know but here's who might" responses.
+
+---
+
+## Phase 3.5 — Structured outputs: make the AI-enhanced heuristics reliable (capability multiplier)
+
+The "AI supercharges the heuristics" half of the principle isn't built yet — meeting extraction, semantic similarity, and manifest field inference are heuristic-only. Use Anthropic **structured outputs** (`messages.parse()` with the existing Pydantic models) so Claude returns the **exact same schema** the heuristics produce — a drop-in quality lift, not a parallel codepath.
+
+- **Meeting extraction** → from "regex catches some decisions" to clean decisions-vs-discussion, owners resolved, returning validated `MeetingNotes` / `ActionItem`.
+- **Semantic reuse / duplicate detection** → real meaning ("alert badge" ≈ "notification bell") returning the same `ReuseMatch` shape as the Jaccard version.
+- **Manifest inference** → AI proposes fields as `Candidate` objects with confidence, fused exactly like the deterministic adapters.
+- **Citations** (optional add-on): when answering from Confluence docs, cite the source spans — reinforces the provenance/trust story.
+- **Discipline:** each of these keeps its heuristic implementation; structured-output AI is selected only when a key is present. Schema parity is the rule.
 
 ---
 
@@ -89,6 +105,7 @@ Each adapter extracts candidate manifest fields *with provenance and confidence*
 - **Suppress empty/noisy sections** (partly done) so digests are signal-dense.
 - **Snooze / opt-out / @-only-on-critical** controls via a Slack command.
 - **Quality gate:** a digest only sends if it has something genuinely new since last time.
+- **Batch API (capability multiplier):** run the scheduled/bulk AI work — many-team digests, nightly drift summaries, bulk transcript processing — through Anthropic's Batch API at 50% cost. Only matters once digests are AI-written and running at scale; pure cost optimization for the proactive layer.
 
 ---
 
@@ -100,20 +117,34 @@ Each adapter extracts candidate manifest fields *with provenance and confidence*
 
 ---
 
+## Phase 6 — MCP server: supercharge *any* AI with our system (capability multiplier)
+
+The strategic capstone, and the concrete delivery of the original cross-platform vision ("transferable to Replit, Codex, Lovable, Gemini"). Wrap the 14 tools as a **Model Context Protocol server** so Claude Desktop, Cursor, Cline, Gemini, and any MCP client get the entire coordination engine — no rewrite, no per-platform port.
+
+- **Portability:** MCP is the open standard built exactly for this; one server, every compatible AI surface.
+- **Grounding for any model:** any connected LLM gets our ground truth (manifests, tickets, drift, decisions) instead of hallucinating org facts — the "supercharge AI back" half, generalized beyond our own bot.
+- **Reuses everything:** the same `execute_tool` handlers back both the Slack agent and the MCP server. No new intelligence — a new doorway to the same brain.
+- **AI-optional still holds:** MCP exposes the tools; the engines behind them remain pure code that works without any model.
+
+---
+
 ## Sequencing
 
 ```
-Phase 1  Manifest Builder ........ unblocks every pilot (do first)
-Phase 2  Living manifests ........ keeps trust over time
-Phase 3  Claude agent + UX ....... makes it feel intelligent
-Phase 4  Notification tuning ..... keeps the proactive value alive
-Phase 5  Deploy + no-terminal .... makes it production-real
+Phase 1    Manifest Builder ........ unblocks every pilot (do first)        ✅
+Phase 2    Living manifests ........ keeps trust over time                  ✅
+Phase 3    Claude agent + UX ....... makes it feel intelligent              ✅
+Phase 3.5  Structured outputs ...... AI supercharges the heuristics (parity)
+Phase 4    Notification tuning ..... keeps the proactive value alive
+           + Batch API ............. cheap scheduled AI at scale
+Phase 5    Deploy + no-terminal .... makes it production-real
+Phase 6    MCP server .............. supercharge any AI; the portability unlock
 ```
 
-Phase 1 is the gate — without low-friction manifests, nothing else gets used. Everything in Phase 1 reuses the importers and providers already built.
+Adoption phases (1, 2, 4, 5) and capability multipliers (3, 3.5, 6) interleave. Phases 1–3 are done. Recommended next: **Phase 6 (MCP)** for the strategic unlock, or **Phase 3.5 (structured outputs)** to make AI-enhanced extraction reliable — both preserve AI-optional discipline.
 
 ---
 
 ## Definition of "pilot-ready"
 
-A consultant can walk into an engagement with **any** mix of tools, point SyncBot at what exists, get a reviewable draft of the org's team map in minutes, correct it, and have the team asking questions in Slack the same day — with every answer traceable to a source and never going stale silently.
+A consultant can walk into an engagement with **any** mix of tools, point SyncBot at what exists, get a reviewable draft of the org's team map in minutes, correct it, and have the team asking questions in Slack the same day — with every answer traceable to a source and never going stale silently. The same engine is reachable from any MCP-compatible AI surface, and works fully with no AI at all.
