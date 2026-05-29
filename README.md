@@ -182,10 +182,12 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] **Multi-Source Manifest Builder** (ADOPTION Phase 1) — fuses repo/git/CODEOWNERS/roster/Jira/transcript into a provenance-annotated draft `team.yaml`; kills the cold-start barrier
 - [x] **Living manifests** (ADOPTION Phase 2) — `refresh-manifest` diffs reality vs manifest and proposes updates; `last_verified` freshness stamps; staleness flagged in `validate`
 
+- [x] **Claude agent** (ADOPTION Phase 3) — Opus 4.8 + adaptive thinking + prompt caching; all 14 capabilities exposed as tools; auto-activates when `ANTHROPIC_API_KEY` is set, keyword fallback otherwise; bot self-introduces on channel join
+
 ### Next
-- [ ] **Claude agent** — natural-language understanding (needs Anthropic API key; replaces keyword matching — highest-leverage upgrade; also unlocks semantic duplicate-work detection AND far better transcript extraction)
+- [ ] Add the Anthropic API key to flip the live bot into natural-language mode (no code change)
 - [ ] New triggers: calendar-driven briefings, Figma webhook, nightly snapshot scan (see IDEAS.md trigger map)
-- [ ] Findability `resources` registry for the remaining teams
+- [ ] Notification tuning (ADOPTION Phase 4) + deploy (Phase 5)
 - [ ] **Deploy to Railway** — bot currently only runs while a local terminal session is alive; deploy as a background worker for 24/7 uptime (config + guide ready in DEPLOY.md, needs browser steps + rotated tokens)
 - [ ] GitHub live provider — activate (PAT needed)
 - [ ] Figma live provider — activate (access token needed)

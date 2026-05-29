@@ -85,6 +85,60 @@ def build_tools(providers: Providers) -> list[dict]:
                 },
                 "required": []
             }
+        },
+        {
+            "name": "find_collaborators",
+            "description": "Discover teams doing related work who may not realize they should be collaborating. Use for 'who should I talk to', 'who else is working on this', 'are we duplicating effort', 'what collaborations are we missing'.",
+            "input_schema": {"type": "object", "properties": {}, "required": []}
+        },
+        {
+            "name": "reuse_radar",
+            "description": "Check whether a component, design, or research already exists before a team builds it. Use for 'has anyone already built X', 'does Y already exist', 'is someone already doing Z'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string", "description": "What the user is about to build or research"},
+                    "exclude_team": {"type": "string", "description": "Optional team to exclude (the asking team)"}
+                },
+                "required": ["description"]
+            }
+        },
+        {
+            "name": "check_alignment",
+            "description": "Check whether team goals ladder up to company objectives, and which objectives multiple teams pursue. Use for 'are we aligned', 'do our goals map to strategy', 'what's not tied to a company objective'.",
+            "input_schema": {"type": "object", "properties": {}, "required": []}
+        },
+        {
+            "name": "find_resource",
+            "description": "Locate where something lives — research repos, brand assets, prototypes, design system, roadmaps, docs. Use for 'where do I find X', 'where is Y', 'where can I get Z'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "What the user is looking for"}},
+                "required": ["query"]
+            }
+        },
+        {
+            "name": "predict_conflicts",
+            "description": "Forecast collisions in planned work before teams start building. Use for 'what conflicts are coming', 'will any teams collide', 'predict problems'.",
+            "input_schema": {"type": "object", "properties": {}, "required": []}
+        },
+        {
+            "name": "cross_team_briefing",
+            "description": "Generate a meeting briefing for a sync between two or more teams — shared dependencies, overlapping components, open cross-team tickets, predicted conflicts, recent PRs, suggested agenda. Use for 'prep me for a sync with X and Y', 'brief me for the meeting'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"teams": {"type": "array", "items": {"type": "string"}, "description": "Two or more team names"}},
+                "required": ["teams"]
+            }
+        },
+        {
+            "name": "get_action_items",
+            "description": "List open action items captured from ingested meeting transcripts. Use for 'what are my action items', 'what did we commit to', 'follow-ups from the meeting'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"team": {"type": "string", "description": "Optional team filter"}},
+                "required": []
+            }
         }
     ]
 
@@ -198,5 +252,76 @@ def execute_tool(name: str, inputs: dict, providers: Providers) -> str:
             })
 
         return json.dumps(dg.to_dict())
+
+    elif name == "find_collaborators":
+        from .discovery import CollaboratorDiscovery
+        suggestions = CollaboratorDiscovery(providers).find_suggestions()
+        return json.dumps([{
+            "team_a": s.team_a, "team_b": s.team_b, "already_linked": s.already_linked,
+            "reason": s.reason, "evidence": s.evidence,
+        } for s in suggestions])
+
+    elif name == "reuse_radar":
+        from .discovery import ReuseRadar
+        matches = ReuseRadar(providers).search(inputs["description"], inputs.get("exclude_team", ""))
+        if not matches:
+            return f"Nothing similar found for '{inputs['description']}'. Looks net-new."
+        return json.dumps([{
+            "kind": m.kind, "name": m.name, "owning_team": m.owning_team,
+            "match_terms": m.overlap, "detail": m.detail,
+        } for m in matches])
+
+    elif name == "check_alignment":
+        from .alignment import AlignmentChecker
+        r = AlignmentChecker(providers).run()
+        return json.dumps({
+            "objectives_pursued_by_multiple_teams": [
+                {"objective": title, "teams": teams} for title, _id, teams in r.overlaps
+            ],
+            "goals_not_linked_to_any_objective": [
+                {"team": o.team, "goal": o.goal} for o in r.orphans
+            ],
+            "linked_goal_count": len(r.linked),
+            "orphan_goal_count": len(r.orphans),
+        })
+
+    elif name == "find_resource":
+        from .findability import FindabilityLocator
+        results = FindabilityLocator(providers).find(inputs["query"])
+        if not results:
+            return f"Couldn't locate anything for '{inputs['query']}'."
+        return json.dumps([{
+            "label": r.label, "name": r.name, "team": r.team, "url": r.url,
+        } for r in results])
+
+    elif name == "predict_conflicts":
+        detector = DriftDetector(providers)
+        conflicts = detector.predict_conflicts()
+        return json.dumps([{
+            "title": c.title, "description": c.description, "teams": c.teams_involved,
+            "tickets": c.tickets_involved, "severity": c.severity.value, "action": c.suggested_action,
+        } for c in conflicts])
+
+    elif name == "cross_team_briefing":
+        from .briefing import BriefingGenerator
+        return BriefingGenerator(providers).cross_team_briefing(inputs["teams"])
+
+    elif name == "get_action_items":
+        import glob, os, yaml
+        with open("config.yaml") as f:
+            teams_dir = yaml.safe_load(f).get("data", {}).get("teams_dir", "./data/synthetic/teams")
+        team_filter = (inputs.get("team") or "").lower()
+        items = []
+        for path in glob.glob(os.path.join(teams_dir, "*", "meeting_notes.json")):
+            with open(path) as f:
+                for note in json.load(f):
+                    if team_filter and team_filter not in note.get("team", "").lower():
+                        continue
+                    for a in note.get("action_items", []):
+                        items.append({
+                            "meeting": note.get("title"), "team": note.get("team"),
+                            "owner": a.get("owner"), "task": a.get("task"), "due": a.get("due"),
+                        })
+        return json.dumps(items) if items else "No action items found in ingested meetings."
 
     return f"Unknown tool: {name}"

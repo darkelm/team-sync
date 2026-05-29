@@ -36,6 +36,29 @@ reuse_radar = ReuseRadar(providers)
 alignment = AlignmentChecker(providers)
 locator = FindabilityLocator(providers)
 
+# Natural-language agent (Claude). Activates only if an API key is present;
+# otherwise the bot uses keyword matching (handle_query).
+AGENT = None
+if os.environ.get("ANTHROPIC_API_KEY"):
+    try:
+        from src.agent.syncbot import SyncBot
+        AGENT = SyncBot("config.yaml")
+    except Exception as e:
+        print(f"[agent] Claude agent unavailable, using keyword mode: {e}", flush=True)
+
+
+def answer(text: str) -> str:
+    """Route a question through the Claude agent when available, else keyword matching."""
+    if AGENT is not None:
+        try:
+            AGENT.reset()
+            reply = AGENT.ask(text)
+            if reply:
+                return reply
+        except Exception as e:
+            print(f"[agent] error, falling back to keywords: {e}", flush=True)
+    return handle_query(text)
+
 
 def _match_teams(text: str) -> list[str]:
     """Return the names of all known teams mentioned in the text, in order of appearance."""
@@ -339,25 +362,52 @@ def handle_query(text: str) -> str:
     )
 
 
+INTRO = (
+    "👋 *Hi, I'm SyncBot* — I help keep teams in sync.\n"
+    "Ask me anything in plain language, for example:\n"
+    "• _who owns the auth component?_\n"
+    "• _when does Team Atlas ship?_\n"
+    "• _who should I be talking to?_\n"
+    "• _has anyone already built a notification bell?_\n"
+    "• _where do I find the user research?_\n"
+    "• _prep me for a sync with Team Atlas and Team Forge_\n"
+    "Type `@syncbot help` anytime for the full list."
+)
+
+BOT_USER_ID = None
+
+
 @app.event("app_mention")
 def handle_mention(event, say):
     text = strip_mention(event.get("text", ""))
     if not text:
         say(handle_query("help"))
         return
-    say(handle_query(text))
+    say(answer(text))
 
 
 @app.event("message")
 def handle_dm(event, say):
     if event.get("channel_type") == "im" and not event.get("bot_id"):
-        text = event.get("text", "")
-        say(handle_query(text))
+        say(answer(event.get("text", "")))
+
+
+@app.event("member_joined_channel")
+def handle_join(event, say):
+    # Introduce SyncBot when it's added to a channel (discoverability).
+    if BOT_USER_ID and event.get("user") == BOT_USER_ID:
+        say(INTRO)
 
 
 if __name__ == "__main__":
     print("SyncBot starting (Socket Mode)...")
+    mode = "Claude agent (natural language)" if AGENT else "keyword matching"
     print(f"Providers: Jira={os.getenv('JIRA_PROVIDER','local')} | Confluence={os.getenv('CONFLUENCE_PROVIDER','local')} | Slack=live")
+    print(f"Understanding: {mode}")
+    try:
+        BOT_USER_ID = app.client.auth_test()["user_id"]
+    except Exception:
+        pass
 
     # Start the proactive weekly-digest scheduler in the background
     digest_scheduler = DigestScheduler(providers, "config.yaml")

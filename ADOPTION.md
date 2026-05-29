@@ -74,12 +74,12 @@ Each adapter extracts candidate manifest fields *with provenance and confidence*
 
 ---
 
-## Phase 3 — Understanding + discoverability (kills barrier #3)
+## Phase 3 — Understanding + discoverability (kills barrier #3) ✅ BUILT
 
-- **Claude agent** (needs key): replaces keyword matching so any phrasing works; also upgrades transcript extraction and semantic duplicate detection. Single highest-leverage upgrade.
-- **Graceful unknowns:** never a dead end. "I don't have that yet — based on the manifests, the closest owner is X. Want me to flag it for the data owner?"
-- **Bot self-introduction:** when invited to a channel, posts a short "here's what I can do" with example questions. Solves discovery.
-- **Provenance in answers:** every answer can cite its source + freshness, building trust from the first interaction.
+- **Claude agent** ✅ — Opus 4.8 with adaptive thinking, prompt caching on the system+tools prefix, and all 14 capabilities exposed as tools. Activates automatically when `ANTHROPIC_API_KEY` is set; the bot falls back to keyword matching (and on any agent error) otherwise. Set the key — no other change needed. Also the path to better transcript extraction and semantic duplicate detection.
+- **Bot self-introduction** ✅ — posts a short "here's what I can do" with example questions when added to a channel. Solves discovery.
+- **Graceful fallback** ✅ — agent errors fall back to keyword answers rather than dead-ending.
+- **Next:** richer "I don't know but here's who might" responses and per-answer provenance/freshness citations.
 
 ---
 
