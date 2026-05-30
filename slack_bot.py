@@ -543,6 +543,29 @@ def _handle_role_command(text: str, event) -> str | None:
     return None
 
 
+def _check_onboarding(text: str, event, say, thread_ts: str) -> bool:
+    """Handle onboarding flow turns. Returns True if the turn was consumed."""
+    from src.onboarding.flow import get_state, process_turn
+    user_id = event.get("user", "")
+    channel_id = event.get("channel", "")
+    q = text.lower()
+    state = get_state(user_id, channel_id)
+
+    # Start a new onboarding flow
+    is_onboard_trigger = any(w in q for w in [
+        "set up my initiative", "new initiative", "new project", "new engagement",
+        "start a new", "set up a new", "onboard my", "onboard this",
+    ])
+    in_flight = state.stage not in ("init", "done")
+
+    if not is_onboard_trigger and not in_flight:
+        return False
+
+    reply, done = process_turn(user_id, channel_id, text if in_flight else "/start")
+    say(reply, thread_ts=thread_ts)
+    return True
+
+
 @app.event("app_mention")
 def handle_mention(event, say):
     # Reply in-thread to keep channels tidy.
@@ -554,6 +577,8 @@ def handle_mention(event, say):
     role_msg = _handle_role_command(text, event)
     if role_msg:
         say(role_msg, thread_ts=thread_ts)
+        return
+    if _check_onboarding(text, event, say, thread_ts):
         return
     role = audience.role_for(event.get("user", ""), event.get("channel", ""))
     say(answer(text, role), thread_ts=thread_ts)

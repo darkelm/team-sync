@@ -379,5 +379,78 @@ def simulate_event(
         console.print(router.explain(ev))
 
 
+@app.command("onboard", help="Set up a new initiative from ANY source — RFP, doc, transcript, or Figma content.")
+def onboard(
+    source: str = typer.Argument(None, help="Path to a file (RFP, brief, transcript, export) or '-' to read from stdin."),
+    out: str = typer.Option("data/imported", "--out", "-o", help="Directory to write setup files into."),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """
+    Universal initiative onboarding — any format works.
+
+      syncbot onboard brief.pdf.txt --out data/google-initiative
+      syncbot onboard transcript.vtt --out data/my-project
+      cat rfp.txt | syncbot onboard - --out data/client-x
+      syncbot onboard            # interactive guided flow (asks you questions)
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.onboarding.extractor import extract
+    from src.onboarding.generator import generate, summary
+
+    if source == "-":
+        text = _sys.stdin.read()
+    elif source and os.path.isfile(source):
+        with open(source, encoding="utf-8", errors="ignore") as f:
+            text = f.read()
+    elif source:
+        # treat the argument as literal text (e.g. a URL text passed by wrapper)
+        text = source
+    else:
+        # interactive mode — ask questions in the terminal
+        console.print("[bold]SyncBot initiative onboarding[/bold]  [dim](any format — paste an RFP, brief, or just describe the work)[/dim]\n")
+        lines = []
+        console.print("Paste your initiative brief (or describe it). Press Enter twice when done:\n")
+        while True:
+            try:
+                line = input()
+            except EOFError:
+                break
+            if line == "" and lines and lines[-1] == "":
+                break
+            lines.append(line)
+        text = "\n".join(lines)
+
+    if not text.strip():
+        console.print("[red]No content provided.[/red]")
+        raise typer.Exit(1)
+
+    console.print("[dim]Extracting initiative structure…[/dim]")
+    brief = extract(text)
+
+    console.print(f"\n[bold]Extracted:[/bold]")
+    console.print(f"  Initiative: [cyan]{brief.title or brief.client or '(unnamed)'}[/cyan]")
+    if brief.teams:
+        console.print(f"  Teams: {', '.join(t.name for t in brief.teams)}")
+    if brief.journeys:
+        console.print(f"  Journeys: {', '.join(j.name for j in brief.journeys)}")
+    if brief.principles:
+        console.print(f"  Principles: {', '.join(p.name for p in brief.principles)}")
+    if brief.open_decisions:
+        console.print(f"  Open decisions: {len(brief.open_decisions)}")
+
+    console.print("")
+    confirmed = typer.confirm("Generate setup files?", default=True)
+    if not confirmed:
+        console.print("[dim]Cancelled — nothing written.[/dim]")
+        raise typer.Exit(0)
+
+    written = generate(brief, out)
+    console.print(f"\n[green]✓[/green] {len(written)} files written to [cyan]{out}[/cyan]")
+    for path in written:
+        console.print(f"  • {path}")
+    console.print("\n[dim]Fields marked TODO need your input. Then `syncbot validate` to confirm.[/dim]")
+
+
 if __name__ == "__main__":
     app()
