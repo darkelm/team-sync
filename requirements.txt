@@ -10,3 +10,5 @@ slack-bolt>=1.18
 networkx>=3.0
 apscheduler>=3.10
 mcp>=1.2
+fastapi>=0.111
+uvicorn>=0.30
