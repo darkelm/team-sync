@@ -165,6 +165,28 @@ class ExperiencePrinciple(BaseModel):
     statement: str
     keywords: list[str] = Field(default_factory=list)     # used to map signals → this principle
 
+class Outcome(BaseModel):
+    """A measurable business or experience outcome the org is pursuing."""
+    id: str
+    name: str
+    metric: str                                            # what is being measured
+    target: str                                            # the goal value / threshold
+    owner: str                                             # DRI (person or team)
+    related_objectives: list[str] = Field(default_factory=list)  # OBJ-* ids
+    related_journeys: list[str] = Field(default_factory=list)    # journey names
+
+class ResearchInsight(BaseModel):
+    """A finding from user research, usability study, or analytics."""
+    id: str
+    title: str
+    summary: str
+    source: str                                            # study name / report
+    date: date
+    themes: list[str] = Field(default_factory=list)       # keyword tags
+    journeys: list[str] = Field(default_factory=list)     # journeys this informs
+    teams: list[str] = Field(default_factory=list)        # teams it's relevant for
+    url: str = ""                                          # link to full report
+
 
 # ── Meetings / Transcripts ────────────────────────────────────────────────────
 

@@ -1,0 +1,74 @@
+# User-research and analytics insights. Each insight carries themes (keyword tags),
+# the journeys it informs, and the teams it is most relevant to. Two insights on
+# the same theme with opposing findings are intentionally included so the
+# contradictions() method has something real to surface.
+insights:
+  - id: RI-1
+    title: Users abandon onboarding at the account-setup step
+    summary: >
+      Usability study (n=24) found that 62 % of new users drop off during the
+      account-setup step — specifically when asked to configure notification
+      preferences before they have used the product. Simplifying or deferring
+      this step reduced drop-off by 40 % in the prototype.
+    source: Q1 Onboarding Usability Study
+    date: 2026-02-14
+    themes: [onboarding, friction, drop-off, notifications, account-setup]
+    journeys: [Onboarding]
+    teams: [Team Phoenix, Team Horizon]
+    url: https://research.example.com/studies/onboarding-q1-2026
+
+  - id: RI-2
+    title: Upfront notification setup increases 30-day retention
+    summary: >
+      Analytics cohort analysis (n=12,000) shows users who complete notification
+      preferences during onboarding have a 28 % higher 30-day retention rate
+      than those who skip it. This contradicts qualitative findings that the
+      step causes friction; the friction may be worth the long-term engagement lift.
+    source: Retention Analytics Report Q1 2026
+    date: 2026-03-01
+    themes: [onboarding, notifications, retention, engagement, account-setup]
+    journeys: [Onboarding, Notifications]
+    teams: [Team Phoenix, Team Horizon, Team Atlas]
+    url: https://analytics.example.com/reports/retention-q1-2026
+
+  - id: RI-3
+    title: Dashboard widget inconsistency erodes trust
+    summary: >
+      Diary study (n=18, 2 weeks) found users noticed visual inconsistency between
+      widgets built by different teams and interpreted it as a sign the product
+      was "unfinished". Teams Nova and Atlas widgets had the highest inconsistency
+      scores. Users rated the product 22 % lower on trust when inconsistency was
+      present.
+    source: Core Dashboard Diary Study 2025-Q4
+    date: 2025-11-20
+    themes: [dashboard, consistency, trust, design system, widgets]
+    journeys: [Core Dashboard]
+    teams: [Team Nova, Team Atlas, Team Horizon]
+    url: https://research.example.com/studies/dashboard-diary-q4-2025
+
+  - id: RI-4
+    title: Real-time notifications drive daily active usage
+    summary: >
+      A/B experiment (n=5,400) showed that reducing notification latency from
+      ~10 s to under 2 s increased daily active usage by 15 % among users who
+      had notifications enabled. The effect was strongest for mobile users.
+    source: Notification Latency A/B Experiment
+    date: 2026-01-10
+    themes: [notifications, real-time, latency, engagement, mobile]
+    journeys: [Notifications]
+    teams: [Team Horizon, Team Nova]
+    url: https://analytics.example.com/experiments/notif-latency-ab
+
+  - id: RI-5
+    title: Designers duplicate components due to poor discovery
+    summary: >
+      Internal survey of 14 designers found 71 % had duplicated a component that
+      already existed in the design system because they did not know it existed.
+      The primary driver was poor search within the Figma library. This directly
+      contributes to design-system drift measured in the drift detector.
+    source: Designer Experience Survey 2026-Q1
+    date: 2026-02-28
+    themes: [design system, discovery, duplication, figma, drift, library]
+    journeys: [Core Dashboard, Onboarding]
+    teams: [Team Nova, Team Forge, Team Phoenix]
+    url: https://research.example.com/studies/designer-experience-q1-2026

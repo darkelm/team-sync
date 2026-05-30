@@ -141,6 +141,18 @@ def experience_principles() -> str:
 
 
 @mcp.tool()
+def outcome_status(outcome_name: str = "") -> str:
+    """Show measurable outcomes the org is pursuing: metric, target, owner, and whether open work ladders to each. Flags outcomes with no supporting tickets. Omit outcome_name to list all."""
+    return _run("outcome_status", outcome_name=outcome_name or None)
+
+
+@mcp.tool()
+def research_insights(topic: str = "") -> str:
+    """Surface research insights relevant to a topic or journey. Flags contradictory findings on the same theme. Omit topic to list all insights."""
+    return _run("research_insights", topic=topic or "")
+
+
+@mcp.tool()
 def emit_event(event_type: str, subject: str = "", team: str = "") -> str:
     """Fire a trigger event and preview who would be proactively notified. Source-agnostic — any signal (design.library_published, research.study_added, roadmap.date_changed, work.created, code.merged, calendar.cross_team_sync, etc.) can wake the coordination engine, not just code changes."""
     from src.agent.events import EventRouter, Event

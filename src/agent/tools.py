@@ -167,6 +167,28 @@ def build_tools(providers: Providers) -> list[dict]:
             "name": "experience_principles",
             "description": "Report whether the org is upholding its experience/design principles, mapping live signals (inconsistencies, undocumented decisions, collisions) to each principle. Use for 'are we living up to our experience principles', 'design vision adherence'.",
             "input_schema": {"type": "object", "properties": {}, "required": []}
+        },
+        {
+            "name": "outcome_status",
+            "description": "Show the measurable outcomes the org is pursuing: metric, target, owner, and whether open work ladders to each outcome. Flag outcomes with no supporting tickets. Use for 'are we hitting our outcomes', 'north star metrics', 'outcome status for <name>', 'what are our outcomes'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "outcome_name": {"type": "string", "description": "Outcome name or id; omit for all outcomes"}
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "research_insights",
+            "description": "Surface research insights relevant to a topic or journey. Flag contradictory findings on the same theme. Use for 'what's the research on X', 'insights about onboarding', 'what do we know about notifications', 'any contradictions in the research'.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "Topic, journey name, or theme to search for"}
+                },
+                "required": []
+            }
         }
     ]
 
@@ -397,5 +419,29 @@ def execute_tool(name: str, inputs: dict, providers: Providers) -> str:
     elif name == "experience_principles":
         from .strategy import StrategyLens
         return StrategyLens(providers).principle_report()
+
+    elif name == "outcome_status":
+        from .strategy import StrategyLens
+        s = StrategyLens(providers)
+        on = inputs.get("outcome_name")
+        if on:
+            assessment = s.assess_outcome(on)
+            if not assessment:
+                known = ", ".join(o.name for o in s.outcome_list)
+                return f"No outcome named '{on}'. Known outcomes: {known}."
+            return json.dumps(assessment)
+        return s.outcomes()
+
+    elif name == "research_insights":
+        from .strategy import StrategyLens
+        s = StrategyLens(providers)
+        topic = inputs.get("topic", "")
+        if not topic:
+            # Return a list of all insights with their themes
+            return json.dumps([{
+                "id": ri.id, "title": ri.title, "themes": ri.themes,
+                "journeys": ri.journeys, "source": ri.source, "date": str(ri.date),
+            } for ri in s.insights])
+        return s.format_insights(topic)
 
     return f"Unknown tool: {name}"

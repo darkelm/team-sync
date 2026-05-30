@@ -1,0 +1,44 @@
+# Business and experience outcomes the org is pursuing this quarter.
+# Each outcome has a metric, a target, an owner, and references to the
+# org objectives (OBJ-*) and journeys it maps to. The engine flags
+# outcomes with no owning team or no supporting work.
+outcomes:
+  - id: OUT-1
+    name: Reduce new-user time-to-value
+    metric: Median minutes from sign-up to first meaningful action
+    target: Under 5 minutes
+    owner: Team Phoenix
+    related_objectives: [OBJ-4]
+    related_journeys: [Onboarding]
+
+  - id: OUT-2
+    name: Near-real-time notification delivery
+    metric: P95 notification delivery latency (event → displayed in UI)
+    target: Under 3 seconds
+    owner: Team Horizon
+    related_objectives: [OBJ-2]
+    related_journeys: [Notifications]
+
+  - id: OUT-3
+    name: Unified authentication compliance
+    metric: Percentage of auth flows using the shared OAuth/PKCE platform
+    target: 100 % by end of quarter
+    owner: Team Atlas
+    related_objectives: [OBJ-1]
+    related_journeys: [Onboarding]
+
+  - id: OUT-4
+    name: Design system adoption
+    metric: Percentage of product surfaces using shared component library (no local overrides)
+    target: 90 % or above
+    owner: Team Nova
+    related_objectives: [OBJ-3]
+    related_journeys: [Core Dashboard, Onboarding]
+
+  - id: OUT-5
+    name: Dashboard load performance
+    metric: P75 Core Dashboard time-to-interactive
+    target: Under 2 seconds on a 4G connection
+    owner: Team Horizon
+    related_objectives: [OBJ-2]
+    related_journeys: [Core Dashboard]

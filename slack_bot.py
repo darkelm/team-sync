@@ -147,6 +147,45 @@ def handle_query(text: str) -> str:
         preview = router.explain(ev)
         return preview + "\n\n_This is the proactive engine — any signal (design publish, new research, date slip, new work…) can trigger it, not just code._"
 
+    # Outcomes — "are we hitting our outcomes", "north star", "outcome status"
+    if (any(w in q for w in ["outcome", "outcomes", "north star", "north stars", "hitting our"])
+            and "research" not in q):
+        import re as _re
+        # Check if a specific outcome name was given
+        named_outcome = None
+        for o in strategy.outcome_list:
+            if o.name.lower() in q or o.id.lower() in q:
+                named_outcome = o.name
+                break
+        if named_outcome:
+            assessment = strategy.assess_outcome(named_outcome)
+            return strategy.format_outcome(assessment) if assessment else f"Outcome '{named_outcome}' not found."
+        return strategy.outcomes()
+
+    # Research insights — "research on X", "insights about X", "what do we know about X"
+    # Careful: keep phrases explicit so we don't collide with the "research" keyword in
+    # the simulate branch (which checks "research in q or study in q" inside a separate
+    # if-block that only fires on "simulate"/"what happens if" queries).
+    if (any(w in q for w in ["research on", "insights about", "insight on", "what do we know about",
+                              "what does the research say", "any research on", "research insight",
+                              "contradictions in research", "contradictory research",
+                              "conflicting research", "conflicting findings"])):
+        import re as _re
+        # Extract topic: strip the trigger phrase, use what remains
+        topic = _re.sub(
+            r".*(research on|insights about|insight on|what do we know about|"
+            r"what does the research say(?: about)?|any research on|research insight|"
+            r"contradictions in research|contradictory research|"
+            r"conflicting research|conflicting findings)\s*",
+            "", text, flags=_re.I
+        ).strip(" ?.,")
+        if not topic or topic == text:
+            # Show contradictions if that's what they asked for
+            if any(w in q for w in ["contradiction", "contradictory", "conflicting"]):
+                return strategy.format_contradictions()
+            return strategy.format_insights("")  # list all
+        return strategy.format_insights(topic)
+
     # Experience strategy — journeys + principles (above components/screens)
     if "principle" in q or "experience vision" in q or "design vision" in q or ("aligned" in q and "vision" in q):
         return strategy.principle_report()
