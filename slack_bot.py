@@ -134,6 +134,91 @@ def _match_teams(text: str) -> list[str]:
     return resolve_teams(providers, text)
 
 
+def _handle_channel_registration(text: str, event) -> str | None:
+    """Handle channel registration commands. Returns a reply or None if not a reg command."""
+    q = text.lower().strip()
+    channel_id = event.get("channel", "")
+
+    # ── "which project is this?" ──────────────────────────────────────────────
+    if any(w in q for w in ["which project", "what project", "which engagement",
+                            "am i in", "is this channel"]):
+        project = project_registry.for_channel(channel_id)
+        if project.name == "default":
+            return ("This channel isn't assigned to a project yet.\n"
+                    "To register it: `@syncbot register this channel for Google Gen AI`")
+        return (f"This channel is part of *{project.name}* (using `{project.config}`).\n"
+                f"All queries here are scoped to that project only.")
+
+    # ── "register this channel for [project]" ─────────────────────────────────
+    if "register this channel" in q or "add this channel" in q:
+        # Extract project name — everything after "for" or "as"
+        m = re.search(r"(?:for|as)\s+(.+)$", text, re.I)
+        project_name = m.group(1).strip().strip('"\'') if m else ""
+
+        if not project_name:
+            # List existing projects to pick from
+            names = [p.name for p in project_registry.all_projects()]
+            if names:
+                return (f"Which project? Say: `@syncbot register this channel for [name]`\n"
+                        f"Current projects: *{', '.join(names)}*\n"
+                        f"Or start a new one: `@syncbot register this channel for My New Project`")
+            return ("No projects yet. Say: `@syncbot register this channel for My New Project`\n"
+                    "I'll start the setup flow.")
+
+        # Find an existing project (fuzzy match on name)
+        existing = next(
+            (p for p in project_registry.all_projects()
+             if project_name.lower() in p.name.lower() or p.name.lower() in project_name.lower()),
+            None
+        )
+
+        # Fetch channel name from Slack if possible
+        channel_name = channel_id
+        try:
+            info = app.client.conversations_info(channel=channel_id)
+            channel_name = "#" + info["channel"]["name"]
+        except Exception:
+            pass
+
+        if existing:
+            # Add this channel to the existing project
+            if channel_id not in existing.channels:
+                existing.channels.append(channel_id)
+                project_registry._save()
+            return (f"✅ *{channel_name}* is now registered to *{existing.name}*.\n"
+                    f"All queries from this channel will use `{existing.config}` — "
+                    f"scoped to that project's teams, journeys, and principles only.\n"
+                    f"Other projects can't see this channel's data.")
+        else:
+            # New project — register the channel and trigger onboarding
+            config_slug = re.sub(r"[^a-z0-9]+", "-", project_name.lower()).strip("-")
+            config_path = f"config-{config_slug}.yaml"
+            project_registry.register(
+                name=project_name,
+                config=config_path,
+                channels=[channel_id],
+            )
+            return (f"✅ Created project *{project_name}* — {channel_name} is registered to it.\n"
+                    f"Config will use `{config_path}` (create this file to activate — "
+                    f"copy `config-google.yaml` as a template).\n\n"
+                    f"To set up the project structure, say:\n"
+                    f"`@syncbot new initiative` and I'll walk you through it.")
+
+    # ── "unregister this channel" ─────────────────────────────────────────────
+    if "unregister this channel" in q or "remove this channel" in q:
+        removed_from = None
+        for p in project_registry.all_projects():
+            if channel_id in p.channels:
+                p.channels.remove(channel_id)
+                removed_from = p.name
+        if removed_from:
+            project_registry._save()
+            return f"✅ This channel is no longer registered to *{removed_from}*. It will use the default config."
+        return "This channel wasn't registered to any specific project."
+
+    return None
+
+
 def strip_mention(text: str) -> str:
     return re.sub(r"<@[A-Z0-9]+>", "", text).strip()
 
@@ -584,11 +669,13 @@ INTRO = (
     "👋 *Hi, I'm SyncBot* — I help keep teams in sync.\n"
     "Ask me anything in plain language, for example:\n"
     "• _who owns the auth component?_\n"
-    "• _when does Team Atlas ship?_\n"
     "• _who should I be talking to?_\n"
-    "• _has anyone already built a notification bell?_\n"
+    "• _has anyone already designed a trust signal?_\n"
     "• _where do I find the user research?_\n"
-    "• _prep me for a sync with Team Atlas and Team Forge_\n"
+    "• _how's the Agentic Shopping journey?_\n"
+    "• _prep me for a sync with Pair 1 and Pair 2_\n\n"
+    "*First time here?* Register this channel to a project:\n"
+    "`@syncbot register this channel for Google Gen AI`\n"
     "Type `@syncbot help` anytime for the full list."
 )
 
@@ -628,11 +715,15 @@ def _check_onboarding(text: str, event, say, thread_ts: str) -> bool:
 
 @app.event("app_mention")
 def handle_mention(event, say):
-    # Reply in-thread to keep channels tidy.
     thread_ts = event.get("thread_ts") or event.get("ts")
     text = strip_mention(event.get("text", ""))
     if not text:
         say(handle_query("help"), thread_ts=thread_ts)
+        return
+    # Channel registration commands (before role/onboarding — they need the raw event)
+    reg_reply = _handle_channel_registration(text, event)
+    if reg_reply:
+        say(reg_reply, thread_ts=thread_ts)
         return
     role_msg = _handle_role_command(text, event)
     if role_msg:
@@ -642,7 +733,6 @@ def handle_mention(event, say):
         return
     channel_id = event.get("channel", "")
     role = audience.role_for(event.get("user", ""), channel_id)
-    # Project registry: "which project does this channel belong to?"
     project = project_registry.for_channel(channel_id)
     say(answer(text, role, project_config=project.config), thread_ts=thread_ts)
 

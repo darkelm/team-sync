@@ -1,22 +1,25 @@
 {
   "projects": [
     {
-      "name": "Google Gen AI",
-      "config": "config-google.yaml",
-      "channels": [],
-      "channel_patterns": [
-        "pair-\\d+",
-        "google-gen-ai",
-        "google-initiative"
-      ]
-    },
-    {
       "name": "Workday Redesign",
       "config": "config-workday.yaml",
-      "channels": [],
+      "channels": [
+        "C_WORKDAY_456"
+      ],
       "channel_patterns": [
         "workday",
         "wd-"
+      ]
+    },
+    {
+      "name": "Google Gen AI",
+      "config": "config-google.yaml",
+      "channels": [
+        "C_GOOGLE_123"
+      ],
+      "channel_patterns": [
+        "pair-\\d+",
+        "google"
       ]
     }
   ]
