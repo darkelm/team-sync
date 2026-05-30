@@ -1,0 +1,8 @@
+# Add this to config.yaml to point SyncBot at your initiative data:
+# data:
+#   teams_dir: ./data/workday-redesign-employee-experience/teams
+# And place journeys.yaml / experience_principles.yaml / org_objectives.yaml
+# in ./data/workday-redesign-employee-experience/
+
+Files generated: 6
+Date: 2026-05-30

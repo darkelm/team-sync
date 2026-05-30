@@ -1,0 +1,19 @@
+providers:
+  jira: local
+  confluence: local
+  github: local
+  slack: live
+  figma: local
+data:
+  synthetic_path: data/imported/workday-redesign-employee-expe
+  teams_dir: data/imported/workday-redesign-employee-expe/teams
+digest:
+  schedule: 0 9 * * 1
+  timezone: America/New_York
+leadership:
+  unit_label: team
+  portfolio_label: portfolio
+  exec_channel: ''
+drift:
+  scan_on_pr: true
+  scan_schedule: 0 8 * * *

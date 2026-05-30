@@ -38,6 +38,10 @@ class InitiativeBrief:
 _TEAM_CUES = re.compile(r"(?:^|\n)\s*(?:pair|team|squad|group|pod)\s*\d*[:\-–—]\s*(.+?)(?:\n|$)", re.I)
 _PRINCIPLE_CUES = re.compile(r"(?:principle|criteria|criterion|standard)[s]?\s*[:\-–—]\s*(.+?)(?:\n|$)", re.I)
 _JOURNEY_CUES = re.compile(r"(?:experience|journey|flow|feature|concept)\s*\d+[:\-–—]\s*(.+?)(?:\n|$)", re.I)
+# Also match bullet lists under a Journeys/Experiences section heading
+_JOURNEY_SECTION = re.compile(r"(?:journeys?|experiences?)[\s:]*\n((?:\s*[-•*]\s*.+\n?)+)", re.I)
+_TEAM_SECTION = re.compile(r"(?:teams?|pairs?|squads?)[\s:]*\n((?:\s*[-•*]\s*.+\n?)+)", re.I)
+_PRINCIPLE_SECTION = re.compile(r"(?:principles?|criteria|values?)[\s:]*\n((?:\s*[-•*]\s*.+\n?)+)", re.I)
 _NORTH_STAR = re.compile(r"(?:north star|success looks like|what good looks like|our goal|the goal)[:\-–—]?\s*(.+?)(?:\n|$)", re.I)
 _CLIENT = re.compile(r"(?:\*\*client\*\*|client)[:\-–—]\s*([A-Z][A-Za-z0-9 &]+?)(?:\n|,|\.|$)", re.I)
 
@@ -66,11 +70,27 @@ def extract_heuristic(text: str) -> InitiativeBrief:
         if not _is_noise(name) and name.lower() not in seen_j:
             seen_j.add(name.lower())
             brief.journeys.append(JourneyDraft(name=name))
+    # Also pick up bullet lists under a Journeys/Experiences heading
+    for section_m in _JOURNEY_SECTION.finditer(text):
+        for line in section_m.group(1).splitlines():
+            name = _clean(re.sub(r"^[-•*]\s*", "", line))[:80]
+            if not _is_noise(name) and name.lower() not in seen_j:
+                seen_j.add(name.lower())
+                brief.journeys.append(JourneyDraft(name=name))
     seen_t: set = set()
     for m in _TEAM_CUES.finditer(text):
         name = _clean(m.group(1))[:60]
         if _is_noise(name) or name.lower() in seen_t: continue
         seen_t.add(name.lower())
+    # Bullet lists under a Teams heading
+    for section_m in _TEAM_SECTION.finditer(text):
+        for line in section_m.group(1).splitlines():
+            # Strip bullet + any inline role suffix after a colon (keep just the team name)
+            raw = _clean(re.sub(r"^[-•*]\s*", "", line))
+            name = raw.split(":")[0].strip()[:60]
+            if not _is_noise(name) and name.lower() not in seen_t:
+                seen_t.add(name.lower())
+                brief.teams.append(TeamDraft(name=name, focus=raw.split(":", 1)[1].strip() if ":" in raw else ""))
         brief.teams.append(TeamDraft(name=name))
     seen_p: set = set()
     for m in _PRINCIPLE_CUES.finditer(text):

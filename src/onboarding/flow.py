@@ -28,6 +28,7 @@ class FlowState:
     accumulated_text: str = ""
     brief: InitiativeBrief | None = None
     output_dir: str = "data/imported"
+    register_project: bool = False  # True = also create config + register in ProjectRegistry
 
     def to_json(self) -> str:
         d = dict(
@@ -156,12 +157,18 @@ def process_turn(user_id: str, channel_id: str, text: str, output_dir: str = "da
         _STORE[_key(user_id)] = state
         return _confirm_prompt(state.brief), False
 
-    # ── confirm → generate ────────────────────────────────────────────────────
+    # ── confirm → generate (+ optional project registration) ─────────────────
     if state.stage == "confirm":
         if any(w in text.lower() for w in ["yes", "go", "looks good", "correct", "do it", "yep", "yeah", "ok"]):
             from .generator import generate, summary
             written = generate(state.brief, state.output_dir)
             msg = summary(state.brief, written)
+
+            # Full project registration: config file + ProjectRegistry + channel mapping
+            if state.register_project and state.brief.title:
+                reg_msg = _register_project(state.brief, state.output_dir, state.channel_id)
+                msg += f"\n\n{reg_msg}"
+
             clear_state(user_id)
             return msg, True
         elif any(w in text.lower() for w in ["no", "change", "edit", "wrong", "fix"]):
@@ -174,7 +181,74 @@ def process_turn(user_id: str, channel_id: str, text: str, output_dir: str = "da
         else:
             return "Say *yes* to generate the setup, or tell me what needs correcting.", False
 
-    return "Something went wrong. Say `@syncbot set up my initiative` to start over.", True
+    return "Something went wrong. Say `@syncbot register project` to start over.", True
+
+
+def _register_project(brief: "InitiativeBrief", output_dir: str, channel_id: str) -> str:
+    """Create the config YAML and register the project in the ProjectRegistry.
+
+    Called after the setup files are already generated. Writes a config-<slug>.yaml
+    pointing at the generated data, then registers it so the channel is immediately live.
+    """
+    import re
+    import yaml as _yaml
+
+    title = brief.title or brief.client or "project"
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
+    config_path = f"config-{slug}.yaml"
+    teams_dir = os.path.join(output_dir, slug, "teams")
+
+    # Write the config YAML
+    config = {
+        "providers": {
+            "jira": "local", "confluence": "local",
+            "github": "local", "slack": "live", "figma": "local",
+        },
+        "data": {
+            "synthetic_path": os.path.join(output_dir, slug),
+            "teams_dir": teams_dir,
+        },
+        "digest": {"schedule": "0 9 * * 1", "timezone": "America/New_York"},
+        "leadership": {
+            "unit_label": "team",
+            "portfolio_label": "portfolio",
+            "exec_channel": "",
+        },
+        "drift": {"scan_on_pr": True, "scan_schedule": "0 8 * * *"},
+    }
+    with open(config_path, "w") as f:
+        _yaml.dump(config, f, sort_keys=False)
+
+    # Register in ProjectRegistry and map the current channel
+    from src.projects import ProjectRegistry
+    reg = ProjectRegistry()
+    reg.register(name=title, config=config_path, channels=[channel_id] if channel_id else [])
+
+    lines = [
+        f"🗂️ *Project registered: {title}*",
+        f"  • Config: `{config_path}` (written ✓)",
+        f"  • Data: `{os.path.join(output_dir, slug)}/`",
+        f"  • This channel is now scoped to *{title}* — all queries here use this project's data only.",
+        f"  • Other channels stay on their own projects.",
+        "",
+        "_To add more channels: `@syncbot register this channel for " + title + "`_",
+    ]
+    return "\n".join(lines)
+
+
+def start_registration(user_id: str, channel_id: str, output_dir: str = "data/imported") -> str:
+    """Begin a project registration flow (creates config + registers in ProjectRegistry)."""
+    state = FlowState(user_id=user_id, channel_id=channel_id,
+                      output_dir=output_dir, register_project=True)
+    state.stage = "describe"
+    _STORE[_key(user_id)] = state
+    return (
+        "👋 Let's register a new project. Tell me about it — paste an RFP, a brief doc, "
+        "a Figma board link summary, or just describe the work.\n\n"
+        "I'll set up the team structure, journeys, and principles, create the config, "
+        "and register this channel automatically.\n\n"
+        "_(Say `cancel` to stop.)_"
+    )
 
 
 def _confirm_prompt(brief: InitiativeBrief) -> str:

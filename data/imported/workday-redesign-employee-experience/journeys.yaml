@@ -1,0 +1,42 @@
+# DRAFT journeys — generated from the initiative brief.
+# Each journey is an end-to-end experience spanning multiple teams.
+# Fill in stages, teams, components, and the experience owner.
+
+journeys:
+- name: 'Employee Morning Routine: login to first task'
+  description: 'TODO: describe the Employee Morning Routine: login to first task journey'
+  stages:
+  - 'TODO: stage 1'
+  - 'TODO: stage 2'
+  - 'TODO: stage 3'
+  teams:
+  - 'Team Alpha: Homepage redesign'
+  - 'Team Beta: Tasks and workflows'
+  components: []
+  owner: 'TODO: experience DRI'
+  north_star: 'TODO: the outcome this journey is judged by'
+- name: 'Manager Review Flow: 1-on-1 prep through action'
+  description: 'TODO: describe the Manager Review Flow: 1-on-1 prep through action
+    journey'
+  stages:
+  - 'TODO: stage 1'
+  - 'TODO: stage 2'
+  - 'TODO: stage 3'
+  teams:
+  - 'Team Alpha: Homepage redesign'
+  - 'Team Beta: Tasks and workflows'
+  components: []
+  owner: 'TODO: experience DRI'
+  north_star: 'TODO: the outcome this journey is judged by'
+- name: 'Onboarding: new hire first 30 days in Workday'
+  description: 'TODO: describe the Onboarding: new hire first 30 days in Workday journey'
+  stages:
+  - 'TODO: stage 1'
+  - 'TODO: stage 2'
+  - 'TODO: stage 3'
+  teams:
+  - 'Team Alpha: Homepage redesign'
+  - 'Team Beta: Tasks and workflows'
+  components: []
+  owner: 'TODO: experience DRI'
+  north_star: 'TODO: the outcome this journey is judged by'

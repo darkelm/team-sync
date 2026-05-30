@@ -190,19 +190,18 @@ def _handle_channel_registration(text: str, event) -> str | None:
                     f"scoped to that project's teams, journeys, and principles only.\n"
                     f"Other projects can't see this channel's data.")
         else:
-            # New project — register the channel and trigger onboarding
-            config_slug = re.sub(r"[^a-z0-9]+", "-", project_name.lower()).strip("-")
-            config_path = f"config-{config_slug}.yaml"
-            project_registry.register(
-                name=project_name,
-                config=config_path,
-                channels=[channel_id],
-            )
-            return (f"✅ Created project *{project_name}* — {channel_name} is registered to it.\n"
-                    f"Config will use `{config_path}` (create this file to activate — "
-                    f"copy `config-google.yaml` as a template).\n\n"
-                    f"To set up the project structure, say:\n"
-                    f"`@syncbot new initiative` and I'll walk you through it.")
+            # New project name — start the full registration flow inline
+            # Store the project name so the flow can use it, then hand off
+            from src.onboarding.flow import start_registration, _STORE, FlowState
+            state = FlowState(user_id=event.get("user", ""), channel_id=channel_id,
+                              stage="describe", register_project=True)
+            # Pre-seed with the project name so the extractor picks it up
+            state.accumulated_text = f"Project name: {project_name}\nClient: {project_name}\n"
+            _STORE[event.get("user", "")] = state
+            return (f"Got it — let's set up *{project_name}* as a new project.\n"
+                    f"Tell me about the work — paste an RFP, brief, transcript, or just describe it.\n"
+                    f"I'll extract the structure, create the config, and register {channel_name} automatically.\n\n"
+                    f"_(Say `cancel` to stop.)_")
 
     # ── "unregister this channel" ─────────────────────────────────────────────
     if "unregister this channel" in q or "remove this channel" in q:
@@ -691,21 +690,32 @@ def _handle_role_command(text: str, event) -> str | None:
 
 
 def _check_onboarding(text: str, event, say, thread_ts: str) -> bool:
-    """Handle onboarding flow turns. Returns True if the turn was consumed."""
-    from src.onboarding.flow import get_state, process_turn
+    """Handle onboarding and project registration flow turns. Returns True if consumed."""
+    from src.onboarding.flow import get_state, process_turn, start_registration
     user_id = event.get("user", "")
     channel_id = event.get("channel", "")
     q = text.lower()
     state = get_state(user_id, channel_id)
-
-    # Start a new onboarding flow
-    is_onboard_trigger = any(w in q for w in [
-        "set up my initiative", "new initiative", "new project", "new engagement",
-        "start a new", "set up a new", "onboard my", "onboard this",
-    ])
     in_flight = state.stage not in ("init", "done")
 
-    if not is_onboard_trigger and not in_flight:
+    # ── Project registration (creates config + registers in ProjectRegistry) ──
+    is_register_trigger = any(w in q for w in [
+        "register project", "register a project", "register new project",
+        "set up a project", "create a project", "add a project",
+    ])
+    if is_register_trigger and not in_flight:
+        reply = start_registration(user_id, channel_id)
+        say(reply, thread_ts=thread_ts)
+        return True
+
+    # ── Content onboarding (setup files only, no registry) ───────────────────
+    is_onboard_trigger = any(w in q for w in [
+        "set up my initiative", "new initiative", "new engagement",
+        "start a new", "set up a new", "onboard my", "onboard this",
+        "new initiative",
+    ])
+
+    if not is_register_trigger and not is_onboard_trigger and not in_flight:
         return False
 
     reply, done = process_turn(user_id, channel_id, text if in_flight else "/start")

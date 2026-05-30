@@ -1,0 +1,25 @@
+# DRAFT experience principles — generated from the initiative brief.
+# These are the values all work is measured against.
+# Fill in the 'statement' for each (one sentence on what it means in practice).
+
+principles:
+- id: EP-1
+  name: Clarity
+  statement: 'TODO: write the full statement for ''Clarity'''
+  keywords:
+  - clarity
+- id: EP-2
+  name: Speed
+  statement: 'TODO: write the full statement for ''Speed'''
+  keywords:
+  - speed
+- id: EP-3
+  name: Trust
+  statement: 'TODO: write the full statement for ''Trust'''
+  keywords:
+  - trust
+- id: EP-4
+  name: Accessibility
+  statement: 'TODO: write the full statement for ''Accessibility'''
+  keywords:
+  - accessibility
