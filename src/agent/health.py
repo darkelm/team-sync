@@ -110,7 +110,6 @@ class HealthAssessor:
         risks = risks[:3]
 
         # Headline
-        unit = self.labels["unit"]
         if status == "green":
             headline = f"{name} is on track — no blocking risks right now."
         elif status == "red":

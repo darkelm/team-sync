@@ -341,7 +341,9 @@ def execute_tool(name: str, inputs: dict, providers: Providers) -> str:
         return BriefingGenerator(providers).cross_team_briefing(inputs["teams"])
 
     elif name == "get_action_items":
-        import glob, os, yaml
+        import glob
+        import os
+        import yaml
         with open("config.yaml") as f:
             teams_dir = yaml.safe_load(f).get("data", {}).get("teams_dir", "./data/synthetic/teams")
         team_filter = (inputs.get("team") or "").lower()

@@ -1,5 +1,5 @@
 """Weekly digest generator — produces per-team summaries for Slack."""
-from datetime import date, datetime, timezone, timedelta
+from datetime import date
 from typing import Optional
 from ..core.schemas import TeamDigest
 from ..providers.factory import Providers

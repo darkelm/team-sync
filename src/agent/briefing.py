@@ -18,7 +18,7 @@ class BriefingGenerator:
             )
 
         team_set = {t.team for t in teams}
-        lines = [f"*🤝 Cross-Team Sync Briefing*", f"_{' × '.join(t.team for t in teams)}_", ""]
+        lines = ["*🤝 Cross-Team Sync Briefing*", f"_{' × '.join(t.team for t in teams)}_", ""]
 
         # 1. Direct dependencies between the teams in the room
         inter_deps = []

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "team-sync",
+  "description": "SyncBot multi-team coordination engine for Claude Code. Answers cross-team ownership, delivery, design-sync, portfolio health, journey consistency, conflict detection, and strategic alignment questions via 20 MCP tools grounded in your team manifests.",
+  "owner": {
+    "name": "darkelm"
+  },
+  "plugins": [
+    {
+      "name": "team-sync",
+      "description": "SyncBot multi-team coordination engine. Answers who-owns, when-ships, journey consistency, portfolio health, conflict detection, and alignment questions via 20 MCP tools grounded in team manifests, Jira, Confluence, GitHub, and Figma exports.",
+      "category": "productivity",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/darkelm/team-sync.git"
+      },
+      "homepage": "https://github.com/darkelm/team-sync"
+    }
+  ]
+}

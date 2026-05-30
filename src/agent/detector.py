@@ -51,7 +51,6 @@ class DriftDetector:
     def _detect_missing_decision_logs(self) -> list[DriftIssue]:
         issues = []
         all_pages = self.p.confluence.get_pages()
-        decision_pages = {p.id for p in all_pages if p.decision_log}
 
         for pr in self.p.github.get_pull_requests(status="open"):
             if pr.cross_team_impact and not any(
@@ -68,7 +67,7 @@ class DriftDetector:
                     teams_involved=[pr.team] + pr.cross_team_impact,
                     components_involved=pr.components_touched,
                     detected_at=datetime.now(timezone.utc),
-                    suggested_action=f"Create a decision log in Confluence documenting why this cross-team change was made.",
+                    suggested_action="Create a decision log in Confluence documenting why this cross-team change was made.",
                 ))
 
         # Flag tickets with breaking-change label and no linked decision log

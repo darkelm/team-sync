@@ -86,8 +86,8 @@ def ingest_path(path: str, team: str, config: str = "config.yaml") -> str:
                 f"{len(notes.action_items)} action items, {len(notes.risks)} risks. "
                 f"Decisions are now searchable.")
 
-    return (f"Couldn't recognize that file as a Jira CSV, Confluence export, git clone, "
-            f"or meeting transcript. Nothing imported.")
+    return ("Couldn't recognize that file as a Jira CSV, Confluence export, git clone, "
+            "or meeting transcript. Nothing imported.")
 
 
 def ingest_upload(filename: str, data: bytes, team: str, config: str = "config.yaml") -> str:

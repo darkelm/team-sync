@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .detector import DriftDetector
-from .discovery import ReuseRadar, CollaboratorDiscovery
+from .discovery import ReuseRadar
 from .briefing import BriefingGenerator
 from .strategy import StrategyLens
 from .similarity import jaccard
@@ -113,7 +113,7 @@ class EventRouter:
                     self._channel(team),
                     f"🔔 *{kind} update:* *{event.subject}* was {verb}"
                     + (f" by {event.team}" if event.team else "")
-                    + f". Your team uses it — review for impact.",
+                    + ". Your team uses it — review for impact.",
                     reason=f"{team} consumes {event.subject}",
                 ))
 

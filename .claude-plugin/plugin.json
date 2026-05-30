@@ -1,0 +1,20 @@
+{
+  "name": "team-sync",
+  "version": "1.0.0",
+  "description": "SyncBot multi-team coordination engine. Answers cross-team ownership, delivery, design-sync, journey consistency, portfolio health, conflict prediction, and strategic alignment questions via 20 MCP tools grounded in your team manifests.",
+  "author": {
+    "name": "darkelm"
+  },
+  "mcpServers": {
+    "team-sync": {
+      "command": "uv",
+      "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python3", "${CLAUDE_PLUGIN_ROOT}/mcp_server.py"],
+      "env": {
+        "JIRA_PROVIDER": "local",
+        "CONFLUENCE_PROVIDER": "local",
+        "GITHUB_PROVIDER": "local",
+        "FIGMA_PROVIDER": "local"
+      }
+    }
+  }
+}
