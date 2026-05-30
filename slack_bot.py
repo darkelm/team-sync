@@ -27,6 +27,34 @@ from src.agent.alignment import AlignmentChecker
 from src.agent.findability import FindabilityLocator
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
+
+# ── Multi-project registry ────────────────────────────────────────────────────
+# Every query is scoped to a project. Google channels → Google data only.
+# Workday channels → Workday data only. They never share data or notifications.
+from src.projects import ProjectRegistry
+project_registry = ProjectRegistry(default_config="config.yaml")
+
+def _project_engines(channel_id: str = "", channel_name: str = ""):
+    """Return all engines scoped to the project this channel belongs to."""
+    project = project_registry.for_channel(channel_id, channel_name)
+    p = project.providers()
+    config = project.config
+    return {
+        "providers": p,
+        "project": project,
+        "detector": DriftDetector(p),
+        "digest_gen": DigestGenerator(p),
+        "briefing_gen": BriefingGenerator(p),
+        "discovery": CollaboratorDiscovery(p),
+        "reuse_radar": ReuseRadar(p),
+        "alignment": AlignmentChecker(p),
+        "locator": FindabilityLocator(p),
+        "health": HealthAssessor(p, config),
+        "strategy": StrategyLens(p, config),
+        "router": EventRouter(p),
+    }
+
+# Default engines (no channel context — used by CLI, MCP, startup checks)
 providers = Providers("config.yaml")
 detector = DriftDetector(providers)
 digest_gen = DigestGenerator(providers)
@@ -57,6 +85,29 @@ from src.agent.audience import AudienceStore, agent_hint, is_non_technical, pars
 from src.agent.plain import plainify
 
 audience = AudienceStore()
+
+
+def answer(text: str, role: str = "ic", project_config: str = "config.yaml") -> str:
+    """Answer a question, scoped to a project and framed for the audience's role.
+
+    project_config isolates the query — Google channels get Google data,
+    Workday channels get Workday data. They never see each other's teams.
+    """
+    reply = None
+    if AGENT is not None:
+        try:
+            # Per-project agent instance so context is scoped
+            from src.agent.syncbot import SyncBot
+            agent = SyncBot(project_config)
+            hint = agent_hint(role)
+            reply = agent.ask(f"{hint}\n\n{text}" if hint else text)
+        except Exception as e:
+            print(f"[agent] error, falling back to keywords: {e}", flush=True)
+    if not reply:
+        reply = handle_query(text)
+    if is_non_technical(role) and AGENT is None:
+        reply = plainify(reply)
+    return reply
 
 
 def answer(text: str, role: str = "ic") -> str:
@@ -103,6 +154,15 @@ def _load_meeting_notes() -> list[dict]:
 
 def handle_query(text: str) -> str:
     q = text.lower()
+
+    # Multi-project management
+    if q.strip() in ("projects", "project status") or "which project" in q or "register project" in q:
+        if "register" in q:
+            return ("To register a new project:\n"
+                    "```python figma_webhook_setup.py``` or ask your SyncBot admin to run:\n"
+                    "`python -c \"from src.projects import ProjectRegistry; "
+                    "ProjectRegistry().register('Name', 'config-name.yaml', channel_patterns=['pattern'])\"``")
+        return project_registry.summary()
 
     # Status / health — what's connected, how fresh, AI on?
     if q.strip() in ("status", "health") or any(w in q for w in ["are you connected", "what's connected", "whats connected", "syncbot status", "system status"]):
@@ -580,8 +640,11 @@ def handle_mention(event, say):
         return
     if _check_onboarding(text, event, say, thread_ts):
         return
-    role = audience.role_for(event.get("user", ""), event.get("channel", ""))
-    say(answer(text, role), thread_ts=thread_ts)
+    channel_id = event.get("channel", "")
+    role = audience.role_for(event.get("user", ""), channel_id)
+    # Project registry: "which project does this channel belong to?"
+    project = project_registry.for_channel(channel_id)
+    say(answer(text, role, project_config=project.config), thread_ts=thread_ts)
 
 
 def _ingest_slack_files(event) -> str:

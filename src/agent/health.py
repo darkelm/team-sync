@@ -16,7 +16,14 @@ from .detector import DriftDetector
 from .plain import labels
 from ..providers.factory import Providers
 
-SNAPSHOT_PATH = "data/health_snapshots.json"
+SNAPSHOT_PATH = "data/health_snapshots.json"  # default; overridden per-project
+
+
+def _snapshot_path(config: str = "config.yaml") -> str:
+    """Per-project snapshot path so multiple projects don't collide."""
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "-", config.lower().replace(".yaml", "")).strip("-")
+    return f"data/{slug}-health-snapshots.json" if slug != "config" else SNAPSHOT_PATH
 
 STATUS_LABEL = {"green": "🟢 On track", "amber": "🟡 At risk", "red": "🔴 Blocked"}
 
@@ -40,22 +47,23 @@ class HealthAssessor:
         self.p = providers
         self.detector = DriftDetector(providers)
         self.labels = labels(config)
+        self._snap_path = _snapshot_path(config)
         self._snapshots = self._load_snapshots()
 
     # ── persistence (week-over-week trajectory) ───────────────────────────────
 
     def _load_snapshots(self) -> dict:
-        if os.path.exists(SNAPSHOT_PATH):
+        if os.path.exists(self._snap_path):
             try:
-                with open(SNAPSHOT_PATH) as f:
+                with open(self._snap_path) as f:
                     return json.load(f)
             except (OSError, ValueError):
                 return {}
         return {}
 
     def _save_snapshots(self) -> None:
-        os.makedirs(os.path.dirname(SNAPSHOT_PATH) or ".", exist_ok=True)
-        with open(SNAPSHOT_PATH, "w") as f:
+        os.makedirs(os.path.dirname(self._snap_path) or ".", exist_ok=True)
+        with open(self._snap_path, "w") as f:
             json.dump(self._snapshots, f, indent=2)
 
     # ── assessment ────────────────────────────────────────────────────────────

@@ -1,0 +1,41 @@
+{
+  "Team Nova": {
+    "date": "2026-05-30",
+    "status": "amber",
+    "risks": [
+      "1 significant change(s) planned without a written decision record"
+    ]
+  },
+  "Team Horizon": {
+    "date": "2026-05-30",
+    "status": "amber",
+    "risks": [
+      "Possible collision with Team Phoenix on shared work \u2014 coordinate before it blocks",
+      "1 item(s) due within 2 weeks not yet started",
+      "2 significant change(s) planned without a written decision record"
+    ]
+  },
+  "Team Forge": {
+    "date": "2026-05-30",
+    "status": "amber",
+    "risks": [
+      "1 inconsistency(ies) with the shared design system"
+    ]
+  },
+  "Team Phoenix": {
+    "date": "2026-05-30",
+    "status": "amber",
+    "risks": [
+      "Possible collision with Team Horizon on shared work \u2014 coordinate before it blocks",
+      "1 significant change(s) planned without a written decision record"
+    ]
+  },
+  "Team Atlas": {
+    "date": "2026-05-30",
+    "status": "amber",
+    "risks": [
+      "3 significant change(s) planned without a written decision record",
+      "1 inconsistency(ies) with the shared design system"
+    ]
+  }
+}
