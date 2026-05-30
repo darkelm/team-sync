@@ -47,6 +47,12 @@ TRIGGER_CATALOG = {
     "meeting.transcript_added": "A meeting transcript was ingested",
     "calendar.cross_team_sync": "A cross-team meeting was scheduled",
     "code.merged": "Code touching a shared component was merged",
+    # Strategy signals — detected from natural conversation in meetings
+    "strategy.metric_revealed": "A stakeholder revealed what success is being measured against",
+    "strategy.pivot": "A team changed direction — dependent pairs need to know",
+    "strategy.differentiation_risk": "The experience isn't feeling distinctive — affects all pairs",
+    "strategy.concept_breakthrough": "A creative direction worth sharing across the initiative",
+    "strategy.duplicate_work": "Two teams are exploring the same space without knowing it",
 }
 
 
@@ -83,6 +89,20 @@ class EventRouter:
                 teams.update(j.teams)
         teams.discard(exclude)
         return sorted(teams)
+
+    def _teams_on_same_journey(self, team_name: str) -> list[str]:
+        """All teams that share at least one journey with this team."""
+        try:
+            from .strategy import StrategyLens
+            lens = StrategyLens(self.p)
+            result = set()
+            for j in lens.journeys:
+                if team_name in j.teams:
+                    result.update(j.teams)
+            result.discard(team_name)
+            return sorted(result)
+        except Exception:
+            return []
 
     def _teams_in_problem_space(self, topic: str, exclude: str = "") -> list[str]:
         """Teams whose active work is semantically near a topic (for research/new-work events)."""
@@ -175,6 +195,72 @@ class EventRouter:
         elif t == "decision.logged":
             a.append(TriggerAction("", f"✅ Decision recorded: {event.subject} — now searchable.",
                                    reason="acknowledgement"))
+
+        # ── Strategy signals (broadcast across the initiative) ────────────────
+        # These route to ALL teams, not just adjacent ones — the whole initiative
+        # needs to know when the direction shifts, a metric is revealed, or a
+        # creative concept is worth sharing. Design language throughout.
+
+        elif t == "strategy.metric_revealed":
+            msg = (f"📊 *Client metric just revealed in {event.team or 'a meeting'}:*\n"
+                   f"_{event.subject}_\n\n"
+                   f"This changes what success looks like. Worth checking whether your "
+                   f"current design direction serves this outcome.")
+            for team in self.p.manifests.get_all_teams():
+                if team.team != event.team:
+                    a.append(TriggerAction(self._channel(team.team), msg,
+                                           reason="initiative-wide metric alignment"))
+
+        elif t == "strategy.pivot":
+            msg = (f"🔄 *{event.team or 'A team'} just changed direction:*\n"
+                   f"_{event.subject}_\n\n"
+                   f"If your work connects to theirs, it's worth a quick sync.")
+            for dep in self.p.manifests.get_dependents(event.team):
+                a.append(TriggerAction(self._channel(dep.team), msg,
+                                       reason=f"{dep.team} is connected to {event.team}"))
+            # Also alert all teams on shared journeys
+            for team in self._teams_on_same_journey(event.team):
+                if team != event.team:
+                    a.append(TriggerAction(self._channel(team), msg,
+                                           reason="shares a journey with the pivoting team"))
+
+        elif t == "strategy.differentiation_risk":
+            msg = (f"⚠️ *Differentiation concern raised — {event.team or 'a team'} flagged this:*\n"
+                   f"_{event.subject}_\n\n"
+                   f"Worth pausing as an initiative to ask: what makes each experience "
+                   f"feel genuinely distinctive? This concern may apply across all pairs.")
+            for team in self.p.manifests.get_all_teams():
+                if team.team != event.team:
+                    a.append(TriggerAction(self._channel(team.team), msg,
+                                           reason="initiative-wide differentiation signal"))
+
+        elif t == "strategy.concept_breakthrough":
+            msg = (f"💡 *Creative direction from {event.team or 'a team'} worth sharing:*\n"
+                   f"_{event.subject}_\n\n"
+                   f"This kind of conceptual framing can be generative for other journeys too. "
+                   f"Take a look before your next ideation session.")
+            for team in self.p.manifests.get_all_teams():
+                if team.team != event.team:
+                    a.append(TriggerAction(self._channel(team.team), msg,
+                                           reason="concept worth sharing across the initiative"))
+
+        elif t == "strategy.duplicate_work":
+            # Find who else is working on the same thing and tell both sides
+            similar = ReuseRadar(self.p).search(event.subject, exclude_team=event.team)
+            if similar and event.team:
+                other_teams = sorted({m.owning_team for m in similar if m.owning_team != event.team})
+                team_list = ", ".join(other_teams) if other_teams else "another team"
+                msg_originator = (f"♻️ *Heads-up:* {team_list} appears to be exploring something "
+                                  f"similar to your current direction ({event.subject}). "
+                                  f"Worth comparing notes before you go too far.")
+                a.append(TriggerAction(self._channel(event.team), msg_originator,
+                                       reason="duplicate-work detection"))
+                for other in other_teams:
+                    msg_other = (f"♻️ *Heads-up:* {event.team} just flagged they're exploring "
+                                 f"something similar to your work ({event.subject}). "
+                                 f"Worth comparing notes.")
+                    a.append(TriggerAction(self._channel(other), msg_other,
+                                           reason="duplicate-work detection"))
 
         # Unknown types simply produce no actions (safe default).
         return [x for x in a if x.channel or x.reason == "acknowledgement"]

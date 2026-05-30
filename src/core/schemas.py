@@ -196,6 +196,20 @@ class ActionItem(BaseModel):
     due: Optional[str] = None
     quote: str = ""
 
+class StrategySignal(BaseModel):
+    """A high-level signal that should route beyond the meeting's own team.
+
+    Unlike a formal decision, these are the moments in a meeting that change
+    direction, reveal what success means, surface a creative breakthrough, or
+    flag that two teams are unknowingly overlapping. They happen conversationally
+    — the system pulls them out and routes them.
+    """
+    type: str   # metric_revealed | pivot | differentiation_risk | concept_breakthrough | duplicate_work
+    description: str
+    quote: str = ""
+    broadcast: bool = True   # True = route to all teams on the initiative, not just adjacent ones
+
+
 class MeetingNotes(BaseModel):
     id: str
     title: str
@@ -206,6 +220,7 @@ class MeetingNotes(BaseModel):
     decisions: list[DecisionLog] = Field(default_factory=list)
     action_items: list[ActionItem] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
+    strategy_signals: list[StrategySignal] = Field(default_factory=list)
     summary: str = ""
 
 

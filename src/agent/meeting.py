@@ -7,10 +7,49 @@ extraction once a key is available (see analyze_with_claude hook).
 from __future__ import annotations
 import re
 from datetime import date
-from ..core.schemas import MeetingNotes, ActionItem, DecisionLog
+from ..core.schemas import MeetingNotes, ActionItem, DecisionLog, StrategySignal
 from ..importers.transcript import Segment
 from ..providers.factory import Providers
 
+
+# ── Strategy signal cues ──────────────────────────────────────────────────────
+
+METRIC_CUES = [
+    "measured on", "being measured", "our metric is", "success metric",
+    "kpi", "the goal is to improve", "client cares about", "they want to see",
+    "we're judged on", "adoption", "retention", "conversion", "engagement",
+    "our north star", "success looks like", "what we're optimizing for",
+]
+PIVOT_CUES = [
+    "pivot", "pivoting", "had to pivot", "change direction", "changing direction",
+    "shifting focus", "we're moving away", "no longer", "instead we'll",
+    "reprioritize", "we need to refocus", "new direction", "scrapping",
+    "starting over", "taking a different approach", "course correct",
+]
+DIFFERENTIATION_CUES = [
+    "doesn't feel different", "too similar", "not differentiated", "generic",
+    "feels like everything else", "what makes us different", "why would someone",
+    "doesn't stand out", "not unique", "anyone could do this", "table stakes",
+    "need to be more distinctive", "bolder", "more opinionated",
+]
+CONCEPT_CUES = [
+    "what if", "imagine", "like a", "metaphor", "the analogy", "it's like",
+    "the idea is", "picture this", "this is the concept", "design principle",
+    "the pattern is", "the mental model", "we're thinking of it as",
+]
+DUPLICATE_CUES = [
+    "also working on", "doing the same thing", "overlap", "both exploring",
+    "another team", "already being done", "someone else is", "heard that",
+    "collision", "we're duplicating", "stepping on each other",
+]
+
+STRATEGY_CUE_MAP = {
+    "metric_revealed": METRIC_CUES,
+    "pivot": PIVOT_CUES,
+    "differentiation_risk": DIFFERENTIATION_CUES,
+    "concept_breakthrough": CONCEPT_CUES,
+    "duplicate_work": DUPLICATE_CUES,
+}
 
 DECISION_CUES = [
     "we decided", "we've decided", "let's go with", "we'll go with", "going with",
@@ -95,6 +134,49 @@ class MeetingAnalyzer:
                     risks.append(sent)
         return decisions, actions, risks
 
+    def _extract_strategy_signals(self, segments: list[Segment]) -> list[StrategySignal]:
+        """Detect high-level strategy signals that should route beyond this team.
+
+        These are the moments — differentiation concerns, client metric reveals,
+        pivots, creative breakthroughs, duplicate-work flags — that affect the
+        whole initiative, not just the meeting's team. They happen conversationally
+        and don't always land as a formal 'we decided.'
+        """
+        signals: list[StrategySignal] = []
+        seen: set = set()
+        full_text = " ".join(s.text for s in segments)
+
+        for sig_type, cues in STRATEGY_CUE_MAP.items():
+            for seg in segments:
+                for sent in _sentences(seg.text):
+                    low = sent.lower()
+                    if any(c in low for c in cues) and low[:80] not in seen:
+                        seen.add(low[:80])
+                        # Make the description human-readable and role-appropriate
+                        if sig_type == "metric_revealed":
+                            desc = f"A stakeholder revealed what success is measured against: \"{sent}\""
+                        elif sig_type == "pivot":
+                            desc = f"The team changed direction: \"{sent}\""
+                        elif sig_type == "differentiation_risk":
+                            desc = f"The experience isn't feeling distinctive enough: \"{sent}\""
+                        elif sig_type == "concept_breakthrough":
+                            desc = f"A creative direction worth sharing broadly: \"{sent}\""
+                        elif sig_type == "duplicate_work":
+                            desc = f"Possible overlap with another team: \"{sent}\""
+                        else:
+                            desc = sent
+
+                        signals.append(StrategySignal(
+                            type=sig_type,
+                            description=desc,
+                            quote=f"{seg.speaker}: {sent}",
+                            broadcast=sig_type in ("metric_revealed", "differentiation_risk",
+                                                    "concept_breakthrough", "duplicate_work"),
+                        ))
+                        break  # one signal per type per speaker turn is enough
+
+        return signals[:8]  # cap — these should be notable, not exhaustive
+
     def analyze(self, segments: list[Segment], team: str, title: str,
                 meeting_date: date | None = None) -> MeetingNotes:
         meeting_date = meeting_date or date.today()
@@ -116,14 +198,20 @@ class MeetingAnalyzer:
             decisions, actions, risks = self._heuristic_extract(segments, team, meeting_date, participants)
             extraction = "heuristic"
 
+        # Strategy signals always use heuristics (clear cue-based patterns);
+        # AI can enhance this path later with the same schema.
+        strategy_signals = self._extract_strategy_signals(segments)
+
         summary = (f"{title} — {len(decisions)} decisions, {len(actions)} action items, "
-                   f"{len(risks)} risks (via {extraction}). Participants: {', '.join(participants) or 'n/a'}.")
+                   f"{len(risks)} risks, {len(strategy_signals)} strategy signal(s) "
+                   f"(via {extraction}). Participants: {', '.join(participants) or 'n/a'}.")
 
         return MeetingNotes(
             id=re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:50] or "meeting",
             title=title, date=meeting_date, team=team,
             participants=participants, teams_mentioned=teams_mentioned,
-            decisions=decisions, action_items=actions, risks=risks, summary=summary,
+            decisions=decisions, action_items=actions, risks=risks,
+            strategy_signals=strategy_signals, summary=summary,
         )
 
     def format_slack_summary(self, notes: MeetingNotes) -> str:
@@ -133,6 +221,20 @@ class MeetingAnalyzer:
         if notes.teams_mentioned:
             lines.append(f"*Other teams mentioned:* {', '.join(notes.teams_mentioned)} "
                          f"— consider looping them in.")
+        if notes.strategy_signals:
+            broadcast = [s for s in notes.strategy_signals if s.broadcast]
+            if broadcast:
+                lines.append(f"\n*📡 Initiative-wide signals ({len(broadcast)}) — routing to other teams:*")
+                type_labels = {
+                    "metric_revealed": "📊 Client metric revealed",
+                    "pivot": "🔄 Direction pivot",
+                    "differentiation_risk": "⚠️ Differentiation concern",
+                    "concept_breakthrough": "💡 Concept worth sharing",
+                    "duplicate_work": "♻️ Possible overlap detected",
+                }
+                for s in broadcast:
+                    label = type_labels.get(s.type, s.type)
+                    lines.append(f"  {label}: {s.description[:120]}")
         lines.append("")
         if notes.decisions:
             lines.append(f"*✅ Decisions ({len(notes.decisions)})*")
