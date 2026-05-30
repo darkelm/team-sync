@@ -1,0 +1,33 @@
+team: "Pair 4 — Android Cross-Device Handoff"
+description: "Designing the moment content moves seamlessly from one Android device to another — the trigger, transition, landing, and partial-handoff edge cases."
+owner:
+  name: ""
+  role: Designer
+  slack_handle: ""
+  email: ""
+members: []
+slack_channel: "#pair-4-android-handoff"
+jira_project: ""
+confluence_space: ""
+figma_files: []
+design_system_library: ""
+components:
+  code: []
+  design:
+    - name: HandoffTrigger
+      description: The moment on the sending device where the user decides to move content
+    - name: TransitionAnimation
+      description: What happens in the air — the cross-device handoff visual/motion
+    - name: LandingOnReceivingDevice
+      description: The receiving device moment — content arrives, app opens
+    - name: PartialHandoff
+      description: Not every app is on the receiving device — graceful degradation
+    - name: PrivacyMoment
+      description: Handing personal content to another device — consent and transparency
+dependencies: []
+roadmap_link: ""
+quarter_goals:
+  - Prototype end-to-end Android handoff for at least 3 content types
+  - Define the partial-handoff pattern for apps not available on the target device
+resources: []
+last_verified: "2026-05-30"

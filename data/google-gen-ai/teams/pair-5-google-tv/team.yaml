@@ -1,0 +1,33 @@
+team: "Pair 5 — Google TV Discovery"
+description: "Solving the evening discovery problem — 'What should I watch?' — with AI recommendations that feel coherent across YouTube, streaming services, and live TV."
+owner:
+  name: ""
+  role: Designer
+  slack_handle: ""
+  email: ""
+members: []
+slack_channel: "#pair-5-google-tv"
+jira_project: ""
+confluence_space: ""
+figma_files: []
+design_system_library: ""
+components:
+  code: []
+  design:
+    - name: CrossServiceResults
+      description: Recommendations that span YouTube, Netflix, live TV — unified
+    - name: WatchTogetherMode
+      description: Two users deciding together what to watch — shared discovery
+    - name: ContentPreview
+      description: The preview moment before committing to watch something
+    - name: JustPutSomethingOn
+      description: The low-intent mode — user wants ambient content, not a decision
+    - name: WhatIWatched
+      description: History and "pick up where I left off" across services
+dependencies: []
+roadmap_link: ""
+quarter_goals:
+  - Prototype the "What should I watch?" moment with cross-service AI recommendations
+  - Define the Watch Together shared-decision pattern
+resources: []
+last_verified: "2026-05-30"

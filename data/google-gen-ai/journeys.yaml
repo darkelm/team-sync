@@ -1,0 +1,46 @@
+journeys:
+  - name: Search Trust Layer
+    description: A user searches for something, gets an AI-generated answer alongside traditional results and ads — and understands what they're looking at, who made it, and what to trust.
+    stages: [Query intent, Mixed results page, AI answer encounter, Trust evaluation, Source exploration, Follow-up or exit]
+    teams:
+      - "Pair 1 — Search Trust Layer"
+    components: [MixedResultsPage, LowConfidenceAnswer, WhyAmISeeingThis, SensitiveQueryHandling]
+    owner: ""  # TODO: experience DRI
+    north_star: A user can immediately distinguish AI answers from links and ads, understands confidence levels, and never feels deceived
+
+  - name: Agentic Shopping
+    description: A user expresses a shopping intent and delegates the browsing, selection, and purchase to an AI agent — with enough transparency and control that they trust the outcome.
+    stages: [Intent capture, Agent browsing, Results review, Trust-before-checkout, Purchase/override, Post-purchase]
+    teams:
+      - "Pair 2 — Universal Cart / Agentic Shopping"
+      - "Pair 1 — Search Trust Layer"
+    components: [AgentIntentCapture, WorkingOnItState, TrustBeforeCheckout, OverrideMoment, PostPurchaseReview]
+    owner: ""
+    north_star: A user with a specific shopping goal can delegate to the agent and trust the result, with a clear moment to review before anything is purchased
+
+  - name: AI Photo Editing
+    description: A non-professional user hands a photo to an AI to edit, reviews the result, and decides whether to keep, undo, or share it.
+    stages: [Photo selection, Editing intent, AI suggestion, Review, Undo/adjust, Share]
+    teams:
+      - "Pair 3 — Google Pics"
+    components: [PhotoSelection, WhatDoYouWantToDo, AISuggestionFlow, UndoAIChanges, SharingMoment]
+    owner: ""
+    north_star: Someone with no editing experience makes a photo they're proud of in under 3 taps — and always knows they can undo it
+
+  - name: Android Cross-Device Handoff
+    description: A user moves content from one Android device to another — naturally, in the moment, without thinking about it.
+    stages: [Trigger on sending device, Transition, Landing on receiving device, Partial handoff fallback]
+    teams:
+      - "Pair 4 — Android Cross-Device Handoff"
+    components: [HandoffTrigger, TransitionAnimation, LandingOnReceivingDevice, PartialHandoff, PrivacyMoment]
+    owner: ""
+    north_star: A user moves seamlessly from phone to TV (or any device) in one gesture — the content is just there
+
+  - name: TV Content Discovery
+    description: A user sits down for the evening and figures out what to watch — across all their services, with or without someone else — without spending 20 minutes deciding.
+    stages: [Evening intent, Cross-service recommendations, Preview, Commit or pass, Watch Together decision]
+    teams:
+      - "Pair 5 — Google TV"
+    components: [CrossServiceResults, WatchTogetherMode, ContentPreview, JustPutSomethingOn, WhatIWatched]
+    owner: ""
+    north_star: A user goes from "I don't know what to watch" to playing something they enjoy in under 60 seconds

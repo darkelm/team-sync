@@ -1,0 +1,36 @@
+team: "Pair 2 — Universal Cart / Agentic Shopping"
+description: "Designing agentic shopping UX where an AI agent browses, selects, and purchases on behalf of the user — with trust, control, and override moments throughout."
+owner:
+  name: ""
+  role: Designer
+  slack_handle: ""
+  email: ""
+members: []
+slack_channel: "#pair-2-universal-cart"
+jira_project: ""
+confluence_space: ""
+figma_files: []
+design_system_library: ""
+components:
+  code: []
+  design:
+    - name: AgentIntentCapture
+      description: How the user expresses shopping intent to the AI agent
+    - name: WorkingOnItState
+      description: Progress/transparency while the agent browses on your behalf
+    - name: TrustBeforeCheckout
+      description: Review moment before agent completes a purchase
+    - name: OverrideMoment
+      description: User steps in to correct or stop the agent mid-task
+    - name: PostPurchaseReview
+      description: Did the agent get it right? Feedback + undo flow
+dependencies:
+  - team: "Pair 1 — Search Trust Layer"
+    reason: Trust and transparency patterns are shared across Search and Shopping
+    components: [WhyAmISeeingThis]
+roadmap_link: ""
+quarter_goals:
+  - Prototype an agentic shopping flow from intent to post-purchase
+  - Define the control/override pattern for agentic UX
+resources: []
+last_verified: "2026-05-30"

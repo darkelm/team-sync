@@ -1,0 +1,37 @@
+# Shared evaluation criteria from the Google Gen AI initiative brief.
+# Every prototype is judged against all seven of these.
+principles:
+  - id: GP-1
+    name: Trust
+    statement: The user understands what the system is doing and why, and has reason to believe it's working in their interest.
+    keywords: [trust, trustworthy, believe, confidence, credibility, sourcing, citation, attribution]
+
+  - id: GP-2
+    name: Control
+    statement: The user can guide, adjust, override, or stop the AI at any meaningful decision point — without friction.
+    keywords: [control, override, guide, stop, adjust, undo, correct, steer, intervene]
+
+  - id: GP-3
+    name: Transparency
+    statement: AI-generated, sponsored, and inferred content is clearly distinguished from human-created or organic content.
+    keywords: [transparent, transparency, disclosure, label, badge, sponsored, ai-generated, sourced, attributed]
+
+  - id: GP-4
+    name: Low-friction value
+    statement: The experience saves meaningful time or effort — it doesn't create new work just to get the AI to do the old work.
+    keywords: [friction, effort, time, fast, quick, seamless, easy, simple, efficient, steps]
+
+  - id: GP-5
+    name: Privacy sensitivity
+    statement: The UI handles personal data, preferences, and browsing history with care — consent is legible, not buried.
+    keywords: [privacy, personal, data, consent, permission, sensitive, private, secure, information]
+
+  - id: GP-6
+    name: Recoverability
+    statement: The user can always correct a bad AI decision — undo is possible, errors are not permanent, and the cost of a mistake is low.
+    keywords: [recover, undo, revert, correct, mistake, error, wrong, fix, restore, back]
+
+  - id: GP-7
+    name: Consumer clarity
+    statement: The design works for everyday users — not just tech-savvy ones. Jargon is absent; the interaction is self-explanatory.
+    keywords: [clear, clarity, simple, understandable, everyday, non-technical, consumer, legible, obvious]

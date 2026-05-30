@@ -1,0 +1,35 @@
+team: "Pair 1 — Search Trust Layer"
+description: "Redesigning Google Search results to establish trust in AI-generated answers alongside traditional results — addressing sourcing, ads transparency, and user control."
+owner:
+  name: ""  # TODO: who leads this pair?
+  role: Designer
+  slack_handle: ""
+  email: ""
+members: []  # TODO: add the two designers on this pair
+slack_channel: "#pair-1-search-trust"
+jira_project: ""   # TODO: set once Jira project is created
+confluence_space: ""
+figma_files: []   # TODO: add Figma file URL for this pair
+design_system_library: ""
+components:
+  code: []
+  design:
+    - name: MixedResultsPage
+      description: A SERP with AI answers, traditional results, and ads coexisting
+    - name: LowConfidenceAnswer
+      description: Visual treatment when the AI isn't sure about its answer
+    - name: WhyAmISeeingThis
+      description: Transparency overlay explaining AI and ad sourcing
+    - name: SensitiveQueryHandling
+      description: Patterns for queries where AI should be more cautious
+dependencies: []
+roadmap_link: ""
+quarter_goals:
+  - Prototype a mixed SERP that lets users distinguish AI answers from links and ads
+  - Establish trust signal patterns usable across all Google surfaces
+resources:
+  - name: Search Trust research brief
+    type: research
+    url: ""  # TODO
+    description: Research backing for Search Trust Layer
+last_verified: "2026-05-30"

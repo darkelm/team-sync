@@ -1,0 +1,36 @@
+team: "Pair 3 — Google Pics"
+description: "AI photo editing for non-professional users — designing for the emotional moment of handing creative control to an AI, including suggestion flows, undo, and sharing."
+owner:
+  name: ""
+  role: Designer
+  slack_handle: ""
+  email: ""
+members: []
+slack_channel: "#pair-3-google-pics"
+jira_project: ""
+confluence_space: ""
+figma_files: []
+design_system_library: ""
+components:
+  code: []
+  design:
+    - name: PhotoSelection
+      description: Picking photos for AI editing — the starting point of the flow
+    - name: WhatDoYouWantToDo
+      description: Intent capture for photo editing — how the user describes the edit
+    - name: AISuggestionFlow
+      description: How AI edits are presented — as options, previews, or just applied
+    - name: UndoAIChanges
+      description: You don't always love what it did — undo/override pattern
+    - name: SharingMoment
+      description: Sharing an AI-edited photo — attribution, transparency
+dependencies:
+  - team: "Pair 1 — Search Trust Layer"
+    reason: AI transparency and control patterns apply to AI-edited content
+    components: [WhyAmISeeingThis]
+roadmap_link: ""
+quarter_goals:
+  - Prototype non-pro photo editing with clear AI suggestion + undo flow
+  - Establish the emotional arc for handing creative control to AI
+resources: []
+last_verified: "2026-05-30"

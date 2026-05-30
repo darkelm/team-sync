@@ -1,0 +1,28 @@
+# SyncBot config for the Google Gen AI initiative pilot.
+# Use this instead of config.yaml when running for this engagement:
+#   JIRA_PROVIDER=local python slack_bot.py --config config-google.yaml  (future)
+#   syncbot validate --config config-google.yaml
+
+providers:
+  jira: local        # flip to "live" once GAPTT project is wired
+  confluence: local  # flip to "live" once GAPTS space is wired
+  github: local
+  slack: live
+  figma: local       # flip to "live" once FIGMA_ACCESS_TOKEN is set
+
+data:
+  synthetic_path: ./data/google-gen-ai
+  teams_dir: ./data/google-gen-ai/teams
+
+digest:
+  schedule: "0 9 * * 1"   # Monday 9am
+  timezone: "America/New_York"
+
+leadership:
+  unit_label: "pair"
+  portfolio_label: "initiative"
+  exec_channel: ""   # TODO: set to #google-gen-ai-leads or similar
+
+drift:
+  scan_on_pr: true
+  scan_schedule: "0 8 * * *"

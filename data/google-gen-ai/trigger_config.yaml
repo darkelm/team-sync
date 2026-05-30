@@ -1,0 +1,57 @@
+# Trigger configuration for the Google Gen AI initiative.
+# These are the signals that should proactively wake SyncBot for THIS engagement.
+# Route: incoming signal → Event → EventRouter → the right pair gets notified.
+
+triggers:
+  # ── Design signals ────────────────────────────────────────────────────────
+  - type: design.library_published
+    description: A shared pattern (trust signal, control moment, AI disclosure) is updated
+    wake_on:
+      - Any component in the shared_patterns list below updates in Figma
+    shared_patterns:
+      - WhyAmISeeingThis       # trust transparency — used by Pairs 1, 2, 3
+      - OverrideMoment         # control/undo — used by Pairs 2, 3
+      - LowConfidenceAnswer    # epistemic humility pattern — Pair 1 owns, others reference
+
+  # ── Research signals ──────────────────────────────────────────────────────
+  - type: research.study_added
+    description: New UX research lands that could inform multiple pairs
+    wake_on:
+      - Any research study added to Dovetail/research repo
+    relevant_themes:
+      - trust in AI systems
+      - user control over AI agents
+      - content discovery behavior
+      - cross-device usage patterns
+      - non-expert AI interaction
+
+  # ── Work signals ──────────────────────────────────────────────────────────
+  - type: work.created
+    description: A pair starts work that might duplicate something another pair is doing
+    wake_on:
+      - New Jira ticket or Figma page created
+    check: reuse_radar  # auto-run before committing to build
+
+  # ── Decision signals ──────────────────────────────────────────────────────
+  - type: decision.logged
+    description: A design decision is made in a crit or review
+    wake_on:
+      - Meeting transcript ingested
+      - Decision log created in Confluence
+    action: make_searchable + notify_dependent_pairs
+
+  # ── Calendar signals ──────────────────────────────────────────────────────
+  - type: calendar.cross_team_sync
+    description: Any cross-pair sync or joint crit
+    wake_on:
+      - Calendar event titled like "Pair 1 + Pair 2", "joint crit", "cross-pair review"
+    action: auto_post_briefing_to_channel
+
+  # ── Shared evaluation signals ─────────────────────────────────────────────
+  # These are specific to this initiative — when a principle is being tested,
+  # the principle_report should auto-run and results shared.
+  - type: research.study_added
+    description: Usability test or prototype test results come in
+    wake_on:
+      - Any study tagged with initiative=google-gen-ai
+    action: run_principle_report  # map findings against Trust/Control/Transparency etc.

@@ -1,0 +1,12 @@
+objectives:
+  - id: OBJ-G1
+    title: Establish trustworthy AI UX across Google consumer surfaces
+    keywords: [trust, ai, transparency, sourcing, control, google, search, consumer]
+
+  - id: OBJ-G2
+    title: Prove AI can reduce friction in high-intent consumer tasks (shopping, editing, discovery)
+    keywords: [friction, shopping, editing, discovery, agentic, assistant, task, intent, value]
+
+  - id: OBJ-G3
+    title: Define cross-surface interaction patterns for Google AI products post-I/O
+    keywords: [pattern, interaction, design, system, consistent, surface, handoff, cross-device]
