@@ -106,16 +106,31 @@ class EventRouter:
         a: list[TriggerAction] = []
 
         if t in ("design.library_published", "design.component_changed", "code.merged"):
-            kind = "Design system" if t.startswith("design") else "A change"
-            verb = "published/updated" if t.startswith("design") else "merged"
+            # Rich metadata from Figma webhook (version notes, journeys, principles)
+            version_notes = event.metadata.get("version_notes", "")
+            journeys = event.metadata.get("journeys_affected", [])
+            principles = event.metadata.get("principles_relevant", [])
+            originator = event.team or "the owning team"
+
             for team in self._consumers_of(event.subject, exclude=event.team):
-                a.append(TriggerAction(
-                    self._channel(team),
-                    f"🔔 *{kind} update:* *{event.subject}* was {verb}"
-                    + (f" by {event.team}" if event.team else "")
-                    + ". Your team uses it — review for impact.",
-                    reason=f"{team} consumes {event.subject}",
-                ))
+                # Design-language message: decision-first, not artifact-first
+                if version_notes:
+                    # Designer wrote a note → this is a real decision, give full context
+                    msg = f"🎨 *Design direction update — {event.subject}*\n"
+                    msg += f"{originator} published a change with this note:\n"
+                    msg += f"_{version_notes}_\n"
+                    if journeys:
+                        msg += f"\nThis affects: *{', '.join(journeys)}*"
+                    if principles:
+                        msg += f"\nPrinciples in play: {', '.join(principles)}"
+                    msg += f"\n\nWorth a quick look before your next design session."
+                else:
+                    # No notes → minimal, non-intrusive
+                    journey_ctx = f" (part of the {', '.join(journeys)} journey)" if journeys else ""
+                    msg = (f"ℹ️ *{event.subject}*{journey_ctx} was updated by {originator}. "
+                           f"No release notes — check with them if it affects your direction.")
+                a.append(TriggerAction(self._channel(team), msg,
+                                       reason=f"{team} works on a journey that uses {event.subject}"))
 
         elif t == "research.study_added":
             for team in self._teams_in_problem_space(event.subject, exclude=event.team):

@@ -175,6 +175,59 @@ def _figma_file_to_team(file_id: str, file_name: str, providers: Providers) -> s
     return ""
 
 
+def _cross_journey_components(components: list[dict | str], providers: Providers) -> list[str]:
+    """Return component names that appear in more than one journey — the ones worth broadcasting."""
+    try:
+        from src.agent.strategy import StrategyLens
+        lens = StrategyLens(providers)
+    except Exception:
+        return []
+    results = []
+    for comp in components:
+        name = comp if isinstance(comp, str) else comp.get("name", "")
+        if not name:
+            continue
+        comp_lower = name.lower()
+        journey_count = sum(
+            1 for j in lens.journeys
+            if any(comp_lower in c.lower() or c.lower() in comp_lower for c in j.components)
+        )
+        if journey_count >= 1:  # any journey reference = worth routing
+            results.append(name)
+    return results
+
+
+def _journeys_for_component(comp_name: str, providers: Providers) -> list[str]:
+    """Which journeys use this component? For rich notification framing."""
+    try:
+        from src.agent.strategy import StrategyLens
+        lens = StrategyLens(providers)
+        comp_lower = comp_name.lower()
+        return [j.name for j in lens.journeys
+                if any(comp_lower in c.lower() or c.lower() in comp_lower for c in j.components)]
+    except Exception:
+        return []
+
+
+def _principles_for_component(comp_name: str, providers: Providers) -> list[str]:
+    """Which experience principles does this component name relate to?"""
+    try:
+        from src.agent.strategy import StrategyLens
+        from src.agent.similarity import tokenize
+        lens = StrategyLens(providers)
+        comp_tokens = tokenize(comp_name)
+        relevant = []
+        for p in lens.principles:
+            kw_tokens = set()
+            for kw in p.keywords:
+                kw_tokens |= tokenize(kw)
+            if comp_tokens & kw_tokens:
+                relevant.append(p.name)
+        return relevant
+    except Exception:
+        return []
+
+
 def _calendar_title_to_teams(title: str, providers: Providers) -> list[str]:
     """
     Parse team names out of a calendar event title.
@@ -306,32 +359,63 @@ async def webhook_figma(request: Request) -> JSONResponse:
     providers = get_providers()
     file_key = payload.get("file_key", "")
     file_name = payload.get("file_name", "")
-
-    # Subject = first created/modified component name, or the file name
     created = payload.get("created", [])
     modified = payload.get("modified", [])
     all_components = created + modified
-    subject = all_components[0].get("name", file_name) if all_components else file_name
 
+    # ── Signal quality filter ─────────────────────────────────────────────
+    # Only notify when a designer intentionally described what changed.
+    # Figma includes version notes on publish — if they're empty, this is
+    # probably a routine tweak, not a design decision worth broadcasting.
+    # This is the key insight: we fire on *design decisions*, not file saves.
+    version_notes = payload.get("description", "").strip()
+    cross_journey_components = _cross_journey_components(all_components, providers)
+
+    if not version_notes and not cross_journey_components:
+        # Routine publish with no decision context and no cross-journey impact — skip.
+        log.info("figma library_publish skipped (no version notes, no cross-journey components)")
+        return JSONResponse({
+            "dispatched": 0,
+            "ignored": "no version notes and no cross-journey shared components — routine publish, not a design decision"
+        })
+
+    # ── Intent-aware routing ──────────────────────────────────────────────
+    # Route component by component, not as one blob. Each cross-journey
+    # component gets its own message to the right pairs, framed by the
+    # design decision (version notes) not just the artifact change.
     team = _figma_file_to_team(file_key, file_name, providers)
-
-    event = Event(
-        type="design.library_published",
-        subject=subject,
-        source="figma",
-        team=team,
-        metadata={
-            "file_key": file_key,
-            "file_name": file_name,
-            "components_created": [c.get("name") for c in created],
-            "components_modified": [c.get("name") for c in modified],
-        },
-    )
-
+    total_dispatched = 0
     router = EventRouter(providers)
-    n = router.dispatch(event)
-    log.info("figma library_publish dispatched=%d file=%s subject=%s", n, file_name, subject)
-    return JSONResponse({"dispatched": n})
+
+    for comp in (cross_journey_components or all_components[:3]):
+        comp_name = comp if isinstance(comp, str) else comp.get("name", file_name)
+        journeys_affected = _journeys_for_component(comp_name, providers)
+        principles_relevant = _principles_for_component(comp_name, providers)
+
+        # Build design-language metadata for the EventRouter to use in messages
+        event = Event(
+            type="design.library_published",
+            subject=comp_name,
+            source="figma",
+            team=team,
+            metadata={
+                "file_key": file_key,
+                "file_name": file_name,
+                "version_notes": version_notes,
+                "journeys_affected": journeys_affected,
+                "principles_relevant": principles_relevant,
+                "components_created": [c.get("name") for c in created if isinstance(c, dict)],
+                "components_modified": [c.get("name") for c in modified if isinstance(c, dict)],
+            },
+        )
+        n = router.dispatch(event)
+        total_dispatched += n
+
+    log.info("figma library_publish dispatched=%d file=%s decision=%s",
+             total_dispatched, file_name, bool(version_notes))
+    return JSONResponse({"dispatched": total_dispatched,
+                         "decision_context": bool(version_notes),
+                         "cross_journey_components": len(cross_journey_components)})
 
 
 # ---------------------------------------------------------------------------
