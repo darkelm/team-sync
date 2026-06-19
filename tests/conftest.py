@@ -11,6 +11,15 @@ import os
 import yaml
 import pytest
 
+# Make the suite hermetic. config.yaml uses `slack: live`, so building Providers
+# constructs a WebClient that needs a token; and importing slack_bot triggers
+# Slack's auth.test unless SYNCBOT_TEST is set. setdefault never overrides a real
+# token if one is already exported (local dev with .env still works).
+os.environ.setdefault("SLACK_BOT_TOKEN", "xoxb-test")
+os.environ.setdefault("SLACK_APP_TOKEN", "xapp-test")
+os.environ.setdefault("SLACK_SIGNING_SECRET", "test-secret")
+os.environ.setdefault("SYNCBOT_TEST", "1")
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 

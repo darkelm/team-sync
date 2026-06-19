@@ -21,9 +21,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 @pytest.fixture()
 def bot(monkeypatch, tmp_path):
-    monkeypatch.setenv("SYNCBOT_TEST", "1")
-    monkeypatch.setenv("SLACK_BOT_TOKEN", os.environ.get("SLACK_BOT_TOKEN", "xoxb-test"))
-    monkeypatch.setenv("SLACK_APP_TOKEN", os.environ.get("SLACK_APP_TOKEN", "xapp-test"))
+    # Env defaults (SYNCBOT_TEST, dummy tokens) come from conftest so the import
+    # below stays offline and never perturbs the session-scoped providers fixture.
     import slack_bot as b
     from src.agent.preferences import NotificationPreferences
 
