@@ -21,33 +21,55 @@ Status: ✅ done · 🔄 in progress · ⬜ todo
 
 ---
 
-## Phase 0 — Make iteration safe *(foundation; blocks Phases 2–3)*
-- ⬜ 0.1 Handler/router test net: golden routing tests for all commands + digest targeting + `answer()`; smoke test for duplicate handler names + non-empty returns
-- ⬜ 0.2 Get the suite green: diagnose `test_run_all_golden_count` (expects 12, actual 10) — real regression vs stale fixture
-- ⬜ 0.3 Local guard rails: `make check` running pytest + AST lint (no duplicate defs, no silent except in handler files)
+## Phase 0 — Make iteration safe
+- ✅ 0.1 Handler/router test net — 28 hermetic golden/smoke tests inc. duplicate-handler guard (`d5232c3`, `352e4d6`)
+- ✅ 0.2 Suite green — `test_run_all_golden_count` was a stale time-relative fixture; made drift-robust (`d5232c3`)
+- ✅ 0.3 `make check` = `scripts/lint.py` (duplicate-def guard) + full pytest (`748416e`)
 - ⬜ 0.4 Reinstall the Slack app to activate the manifest changes *(manual — owner)*
 
 ## Phase 1 — Kill the silent-failure class
-- ⬜ 1.1 Triage the ~20 remaining swallowed exceptions: log-and-degrade vs annotated-intentional
-- ⬜ 1.2 Startup preflight: assert each `provider: live` has its token; friendly error instead of raw `KeyError`
+- ✅ 1.1 Triaged swallowed exceptions: log-and-degrade vs annotated-intentional (`cfb85f2`, `ca7db9a`)
+- ✅ 1.2 Startup preflight: clear message when a provider is `live` but its token is missing (`748416e`)
 
 ## Phase 2 — Make the router refactor-safe
-- ⬜ 2.1 Refactor `handle_query` if/elif ladder → ordered `(name, matcher, handler)` registry (kills substring shadowing)
-- ⬜ 2.2 Honest keyword-mode fallback + visible mode indicator in help/intro/status
+- ⬜ 2.1 Refactor `handle_query` if/elif ladder → ordered registry *(see "Remaining" below)*
+- ✅ 2.2 Honest keyword-mode fallback + visible mode indicator in help/intro (`748416e`)
 
 ## Phase 3 — Tenant isolation everywhere
-- ⬜ 3.1 Make the MCP server project-aware (not hardwired to `config.yaml`)
-- ⬜ 3.2 Enforce entitlement at the tool layer; route Slack/MCP/CLI through one guarded path
-- ⬜ 3.3 Scope + index `_load_meeting_notes` (no per-query filesystem glob on the default config)
-- ⬜ 3.4 Per-project notification prefs (no team-name collision across clients)
+- ✅ 3.1 MCP server project-selectable via `SYNCBOT_CONFIG` (`88c430e`)
+- ⬜ 3.2 Enforce entitlement at the tool layer *(see "Remaining" below)*
+- ⬜ 3.3 Scope `_load_meeting_notes` to the project *(see "Remaining" below)*
+- ⬜ 3.4 Per-project notification prefs *(see "Remaining" below)*
 
 ## Phase 4 — Onboarding & usability
-- ⬜ 4.1 Single source of truth for provider toggles (config.yaml vs `.env`)
-- ⬜ 4.2 Right-size the "no-terminal" / connectors-off claims to match reality
-- ⬜ 4.3 Role-framed help (designer / leadership / dev)
-- ⬜ 4.4 Surface manifest staleness (`last_verified` age) in digests + `validate`
+- ✅ 4.1 Single source of truth for provider toggles (config.yaml) (`88c430e`)
+- ✅ 4.2 Right-sized the "no-terminal" / "automatic" claims (`f304552`)
+- ⬜ 4.3 Role-framed help (designer / leadership / dev) *(see "Remaining" below)*
+- ✅ 4.4 Surface manifest staleness in digests (`88c430e`)
 
 ## Phase 5 — Docs & governance
-- ⬜ 5.1 Reconcile tool-count/capability claims (14 vs 20) across README/plugin.json/code
-- ⬜ 5.2 Data-flow / security posture doc for the IT approval kit
-- ⬜ 5.3 Token-handling hygiene note (rotation plan, `.env` hygiene)
+- ✅ 5.1 Reconciled tool count: 20 coordination tools (22 on MCP) (`f304552`)
+- ✅ 5.2 `SECURITY.md` data-flow / posture doc (`f304552`)
+- ✅ 5.3 Token-handling hygiene note in SECURITY.md (`f304552`)
+
+---
+
+## Remaining: the "project-aware keyword mode" keystone
+
+Items **2.1, 3.2, 3.3, 3.4, 4.3** are entangled and best done as ONE focused,
+well-tested change rather than piecemeal. Why: in keyword mode, `handle_query`
+uses module-level engines (default `config.yaml`) and is **not** project-scoped —
+so true per-project isolation (3.2/3.3) and per-project prefs (3.4) require
+threading a per-project engine bundle (the existing `_project_engines`) through
+`handle_query` and the digest/role handlers. Doing 3.4 alone would *break* the
+new digest-targeting feature (interactive writes default prefs, scheduler reads
+per-project). The router registry (2.1) and role-framed help (4.3) ride on the
+same signature change.
+
+Recommended approach: make `handle_query(text, engines)` and `answer(...)`
+project-aware, restructure the dispatch into an ordered `(matcher, handler)`
+registry as part of it, and add a test that registers a second project and
+asserts a query in that channel returns that project's data. The Phase 0 test
+net guards the default path during the refactor.
+
+This is the one remaining large rock; everything else in the plan is done.
