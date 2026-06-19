@@ -160,11 +160,15 @@ class DigestGenerator:
                 print(f"[digest] {name} — nothing new since last digest, skipping.", flush=True)
                 results["unchanged"].append(name)
                 continue
-            ok = self.p.slack.post_digest(team.slack_channel, self.format_slack_message(digest))
+            # A Slack-registered channel ("send <team> digest here") overrides the
+            # manifest's slack_channel. Channel IDs are robust to renames.
+            target = self.prefs.get_digest_channel(name) or team.slack_channel
+            display = self.prefs.get(name).get("digest_channel_name") or target
+            ok = self.p.slack.post_digest(target, self.format_slack_message(digest))
             if ok:
                 self.prefs.record_signature(name, sig)
-                results["sent"].append((name, team.slack_channel))
+                results["sent"].append((name, display))
             else:
-                print(f"[digest] {name} — delivery to {team.slack_channel} FAILED.", flush=True)
-                results["failed"].append((name, team.slack_channel))
+                print(f"[digest] {name} — delivery to {display} FAILED.", flush=True)
+                results["failed"].append((name, display))
         return results

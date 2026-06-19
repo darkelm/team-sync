@@ -16,6 +16,8 @@ DEFAULTS = {
     "paused_until": None,        # ISO date string while muted
     "sections": {"dev": True, "design": True},
     "last_signature": None,      # quality gate — skip a digest identical to the last
+    "digest_channel": None,      # Slack channel ID to deliver to (overrides manifest slack_channel)
+    "digest_channel_name": None, # human-readable name for display
 }
 
 
@@ -64,6 +66,31 @@ class NotificationPreferences:
         self._data.setdefault(team, {}).setdefault("sections", dict(DEFAULTS["sections"]))[section] = on
         self._save()
         return f"{'Enabled' if on else 'Disabled'} the *{section}* section for *{team}*'s digest."
+
+    # ── digest delivery target (Slack-native: "send <team> digest here") ───────
+
+    def set_digest_channel(self, team: str, channel_id: str, channel_name: Optional[str] = None) -> None:
+        entry = self._data.setdefault(team, {})
+        entry["digest_channel"] = channel_id
+        entry["digest_channel_name"] = channel_name or channel_id
+        self._save()
+
+    def clear_digest_channel(self, team: str) -> bool:
+        """Remove the override. Returns True if one was set."""
+        entry = self._data.setdefault(team, {})
+        had = bool(entry.get("digest_channel"))
+        entry["digest_channel"] = None
+        entry["digest_channel_name"] = None
+        self._save()
+        return had
+
+    def get_digest_channel(self, team: str) -> Optional[str]:
+        return self.get(team)["digest_channel"]
+
+    def digest_targets(self) -> dict:
+        """team -> display name, for every team with an explicit digest channel."""
+        return {t: (d.get("digest_channel_name") or d.get("digest_channel"))
+                for t, d in self._data.items() if d.get("digest_channel")}
 
     # ── gates (called by the digest generator) ────────────────────────────────
 

@@ -200,6 +200,74 @@ def _handle_channel_registration(text: str, event) -> str | None:
     return None
 
 
+def _channel_display_name(channel_id: str) -> str:
+    """Resolve a channel ID to a #name for display; fall back to the ID."""
+    try:
+        info = app.client.conversations_info(channel=channel_id)
+        return "#" + info["channel"]["name"]
+    except Exception:
+        return channel_id
+
+
+def _handle_digest_targeting(text: str, event) -> str | None:
+    """Slack-native digest delivery targeting. Returns a reply or None.
+
+    Lets anyone make the current channel a team's digest destination without
+    editing team.yaml — e.g. `@syncbot send Team Nova's digest here`,
+    `@syncbot send all digests here`, `@syncbot stop sending digests here`.
+    The mapping (team -> channel ID) is stored in notification prefs and wins
+    over the manifest's slack_channel. Plain `send digest` (no "here") falls
+    through to the broadcast handler.
+    """
+    q = text.lower().strip()
+    if "digest" not in q:
+        return None
+    channel_id = event.get("channel", "")
+    is_here = "here" in q or "this channel" in q
+    is_send = any(w in q for w in ["send", "deliver", "post", "route"])
+    is_stop = any(w in q for w in ["stop", "don't", "dont", "no longer", "unsubscribe", "remove", "cancel"])
+    prefs = digest_gen.prefs
+
+    # Teams visible in THIS channel's project — used for inference and prompts.
+    proj = project_registry.for_channel(channel_id)
+    proj_teams = [t.team for t in proj.providers().manifests.get_all_teams()]
+
+    # STOP delivering here
+    if is_stop and is_here:
+        named = _match_teams(text)
+        candidates = named or proj_teams
+        cleared = [t for t in candidates if prefs.get_digest_channel(t) == channel_id and prefs.clear_digest_channel(t)]
+        if cleared:
+            return f"✅ Stopped delivering digests to this channel for: *{', '.join(cleared)}*."
+        return "No team digests were being delivered to this channel."
+
+    # SET delivery here
+    if is_send and is_here:
+        channel_name = _channel_display_name(channel_id)
+        if "all" in q and "digest" in q:
+            teams = proj_teams
+        else:
+            teams = _match_teams(text)
+            if not teams:
+                if len(proj_teams) == 1:
+                    teams = proj_teams
+                else:
+                    example = proj_teams[0] if proj_teams else "Team Nova"
+                    return ("Which team's digest should I deliver here?\n"
+                            f"e.g. `@syncbot send {example}'s digest here`"
+                            + (f"\nTeams: {', '.join(proj_teams)}" if proj_teams else "")
+                            + "\nOr `@syncbot send all digests here` for every team.")
+        if not teams:
+            return "No teams are configured yet."
+        for t in teams:
+            prefs.set_digest_channel(t, channel_id, channel_name)
+        return (f"✅ Digests for *{', '.join(teams)}* will be delivered to {channel_name} from now on.\n"
+                f"_Automatically on the weekly schedule, or right now with_ `@syncbot send digest`.\n"
+                f"_Stop anytime:_ `@syncbot stop sending digests here`.")
+
+    return None
+
+
 def strip_mention(text: str) -> str:
     return re.sub(r"<@[A-Z0-9]+>", "", text).strip()
 
@@ -529,6 +597,21 @@ def handle_query(text: str) -> str:
                          f"   Tickets: {', '.join(c.tickets_involved)}\n   → {c.suggested_action}")
         return "\n".join(lines)
 
+    # Where are digests delivered? (discoverability for the targeting feature)
+    if any(p in q for p in ["where do digests", "where are digests", "where do the digests",
+                            "digest channel", "digest target", "where digests go", "digests go"]):
+        targets = digest_gen.prefs.digest_targets()
+        if not targets:
+            return ("No digest delivery channels are set yet. In any channel, say "
+                    "`@syncbot send <team>'s digest here` and I'll deliver there from then on. "
+                    "Until then each team falls back to its configured channel.")
+        lines = ["*📬 Digest delivery targets*\n"]
+        for team, ch in targets.items():
+            lines.append(f"• *{team}* → {ch}")
+        lines.append("\n_Change with_ `@syncbot send <team>'s digest here` _·_ "
+                     "`@syncbot stop sending digests here`.")
+        return "\n".join(lines)
+
     # Post digests to all team channels on demand
     if any(w in q for w in ["post digest", "send digest", "digest all", "post all", "broadcast"]):
         res = digest_gen.post_all_digests(force=True)
@@ -545,9 +628,9 @@ def handle_query(text: str) -> str:
         if not lines:
             return "No teams are configured to receive digests yet."
         if failed and not sent:
-            lines.append("\n_To fix: create the channel(s) and `/invite @syncbot`, "
-                         "or point the team's `slack_channel` at a channel I'm in. "
-                         "Tip: `@syncbot digest for <team>` shows a digest right here without posting._")
+            lines.append("\n_Fix it from Slack — no config editing:_ go to the channel you want "
+                         "and say `@syncbot send <team>'s digest here` (or `send all digests here`). "
+                         "_Tip:_ `@syncbot digest for <team>` previews a digest inline without posting.")
         return "\n".join(lines)
 
     # Scan / conflicts
@@ -653,8 +736,11 @@ def handle_query(text: str) -> str:
         "• `@syncbot prep me for a sync with <team> and <team>` — meeting briefing\n"
         "• `@syncbot get me up to speed on <team>` — team briefing\n"
         "• `@syncbot is <team>'s design in sync` — Figma drift check\n"
-        "• `@syncbot digest for <team>` — weekly digest preview\n"
-        "• `@syncbot post digests` — send digests to all team channels now\n"
+        "• `@syncbot digest for <team>` — weekly digest preview (inline, no posting)\n"
+        "• `@syncbot send <team>'s digest here` — deliver that team's digest to this channel\n"
+        "• `@syncbot stop sending digests here` — undo the above\n"
+        "• `@syncbot where do digests go` — list digest delivery channels\n"
+        "• `@syncbot post digests` — send digests to all configured channels now\n"
         "• `@syncbot mute digests for <team>` / `resume digests for <team>` — pause control\n"
         "• `@syncbot only alert <team> on high` — set digest severity threshold\n"
         "• `@syncbot dependencies for <team>` — dependency map"
@@ -731,6 +817,12 @@ def handle_mention(event, say):
     reg_reply = _handle_channel_registration(text, event)
     if reg_reply:
         say(reg_reply, thread_ts=thread_ts)
+        return
+    # Digest delivery targeting ("send <team> digest here") — needs the raw event
+    # for the channel ID. Plain "send digest" (no "here") falls through to broadcast.
+    dig_reply = _handle_digest_targeting(text, event)
+    if dig_reply:
+        say(dig_reply, thread_ts=thread_ts)
         return
     role_msg = _handle_role_command(text, event)
     if role_msg:
