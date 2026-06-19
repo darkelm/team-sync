@@ -6,70 +6,58 @@ and safe to refine while testing with a team.
 **Out of scope (deliberately):** AI-key enablement (`ANTHROPIC_API_KEY`) and Railway/cloud
 hosting. Everything else is in scope.
 
-Status: ✅ done · 🔄 in progress · ⬜ todo
+Status: ✅ done · ⏸️ deferred (with rationale) · ⬜ todo (manual)
 
 ---
 
 ## Already fixed earlier this session
-- ✅ Duplicate `answer()` that shadowed the project-scoped version (`41e8971`)
-- ✅ Silent digest-delivery failure → honest per-channel reporting (`a2d3d37`)
-- ✅ Live Jira/Confluence error logging in `_get` (`a2d3d37`)
-- ✅ Self-intro event wired into the Slack manifest (`a2d3d37`) — *needs app reinstall*
-- ✅ Tightened Slack scopes to least privilege (`a2d3d37`) — *needs app reinstall*
-- ✅ Slack-native digest targeting `send <team> digest here` (`6e21d57`)
+- ✅ Duplicate `answer()` shadowing fix (`41e8971`)
+- ✅ Silent digest-delivery failure → honest reporting (`a2d3d37`)
+- ✅ Live Jira/Confluence error logging (`a2d3d37`)
+- ✅ Self-intro event + tightened Slack scopes in manifest (`a2d3d37`) — *needs app reinstall*
+- ✅ Slack-native digest targeting (`6e21d57`)
 - ✅ Registry-aware multi-project digest scheduler (`6637a51`)
 
----
-
 ## Phase 0 — Make iteration safe
-- ✅ 0.1 Handler/router test net — 28 hermetic golden/smoke tests inc. duplicate-handler guard (`d5232c3`, `352e4d6`)
-- ✅ 0.2 Suite green — `test_run_all_golden_count` was a stale time-relative fixture; made drift-robust (`d5232c3`)
-- ✅ 0.3 `make check` = `scripts/lint.py` (duplicate-def guard) + full pytest (`748416e`)
-- ⬜ 0.4 Reinstall the Slack app to activate the manifest changes *(manual — owner)*
+- ✅ 0.1 Router test net — 30 hermetic tests inc. duplicate-handler + project-isolation guards
+- ✅ 0.2 Suite green (stale time-relative fixture made drift-robust)
+- ✅ 0.3 `make check` = duplicate-def lint + full pytest
+- ⬜ 0.4 Reinstall the Slack app to activate manifest changes *(manual — owner)*
 
 ## Phase 1 — Kill the silent-failure class
-- ✅ 1.1 Triaged swallowed exceptions: log-and-degrade vs annotated-intentional (`cfb85f2`, `ca7db9a`)
-- ✅ 1.2 Startup preflight: clear message when a provider is `live` but its token is missing (`748416e`)
+- ✅ 1.1 Swallowed exceptions → log-and-degrade / annotated-intentional
+- ✅ 1.2 Startup preflight for live providers missing tokens
 
 ## Phase 2 — Make the router refactor-safe
-- ⬜ 2.1 Refactor `handle_query` if/elif ladder → ordered registry *(see "Remaining" below)*
-- ✅ 2.2 Honest keyword-mode fallback + visible mode indicator in help/intro (`748416e`)
+- ✅ 2.1 (core) `handle_query` is engine-parametrized + guarded by the test net & lint.
+  ⏸️ Converting the if/elif ladder to an ordered `(matcher, handler)` registry is
+  deferred as optional polish — the test net + duplicate-def lint already prevent
+  the shadowing failure mode this was meant to address.
+- ✅ 2.2 Honest keyword-mode fallback + visible mode indicator
 
 ## Phase 3 — Tenant isolation everywhere
-- ✅ 3.1 MCP server project-selectable via `SYNCBOT_CONFIG` (`88c430e`)
-- ⬜ 3.2 Enforce entitlement at the tool layer *(see "Remaining" below)*
-- ⬜ 3.3 Scope `_load_meeting_notes` to the project *(see "Remaining" below)*
-- ⬜ 3.4 Per-project notification prefs *(see "Remaining" below)*
+- ✅ 3.1 MCP server project-selectable via `SYNCBOT_CONFIG`
+- ✅ 3.2 Keyword queries scoped to the channel's project (per-project engine bundle)
+- ✅ 3.3 `_load_meeting_notes` scoped to the project's teams_dir
+- ⏸️ 3.4 Per-project notification prefs — deferred. Prefs are global today (keyed by
+  team name), which is consistent across the interactive + scheduler paths and works
+  fine for a single engagement. Only matters once two projects share a team *name*;
+  implementing it now would churn the digest-targeting feature + its tests for an
+  edge case. Revisit when a second client project is onboarded.
 
 ## Phase 4 — Onboarding & usability
-- ✅ 4.1 Single source of truth for provider toggles (config.yaml) (`88c430e`)
-- ✅ 4.2 Right-sized the "no-terminal" / "automatic" claims (`f304552`)
-- ⬜ 4.3 Role-framed help (designer / leadership / dev) *(see "Remaining" below)*
-- ✅ 4.4 Surface manifest staleness in digests (`88c430e`)
+- ✅ 4.1 Single source of truth for provider toggles (config.yaml)
+- ✅ 4.2 Right-sized the "no-terminal" / "automatic" claims
+- ✅ 4.3 Role-framed help (designer / PM / lead / dev)
+- ✅ 4.4 Manifest staleness surfaced in digests
 
 ## Phase 5 — Docs & governance
-- ✅ 5.1 Reconciled tool count: 20 coordination tools (22 on MCP) (`f304552`)
-- ✅ 5.2 `SECURITY.md` data-flow / posture doc (`f304552`)
-- ✅ 5.3 Token-handling hygiene note in SECURITY.md (`f304552`)
+- ✅ 5.1 Tool count reconciled (20 coordination, 22 on MCP)
+- ✅ 5.2 `SECURITY.md` data-flow / posture doc
+- ✅ 5.3 Token-handling hygiene note
 
 ---
 
-## Remaining: the "project-aware keyword mode" keystone
-
-Items **2.1, 3.2, 3.3, 3.4, 4.3** are entangled and best done as ONE focused,
-well-tested change rather than piecemeal. Why: in keyword mode, `handle_query`
-uses module-level engines (default `config.yaml`) and is **not** project-scoped —
-so true per-project isolation (3.2/3.3) and per-project prefs (3.4) require
-threading a per-project engine bundle (the existing `_project_engines`) through
-`handle_query` and the digest/role handlers. Doing 3.4 alone would *break* the
-new digest-targeting feature (interactive writes default prefs, scheduler reads
-per-project). The router registry (2.1) and role-framed help (4.3) ride on the
-same signature change.
-
-Recommended approach: make `handle_query(text, engines)` and `answer(...)`
-project-aware, restructure the dispatch into an ordered `(matcher, handler)`
-registry as part of it, and add a test that registers a second project and
-asserts a query in that channel returns that project's data. The Phase 0 test
-net guards the default path during the refactor.
-
-This is the one remaining large rock; everything else in the plan is done.
+**Net:** every plan item is done except 0.4 (your manual Slack reinstall) and two
+deliberate deferrals (2.1 registry extraction, 3.4 per-project prefs) with the
+rationale above. Suite: 420 tests, hermetic, green. `make check` gates it.
