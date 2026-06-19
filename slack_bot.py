@@ -105,6 +105,16 @@ strategy = StrategyLens(providers)
 from src.agent.events import EventRouter, Event
 router = EventRouter(providers)
 
+# The default engine bundle (config.yaml). handle_query() runs against whatever
+# bundle it's handed; channel handlers pass a per-project bundle from
+# _project_engines() so keyword queries are scoped to the channel's project.
+_DEFAULT_ENGINES = {
+    "providers": providers, "project": None,
+    "detector": detector, "digest_gen": digest_gen, "briefing_gen": briefing_gen,
+    "discovery": discovery, "reuse_radar": reuse_radar, "alignment": alignment,
+    "locator": locator, "health": health, "strategy": strategy, "router": router,
+}
+
 # Natural-language agent (Claude). Activates only if an API key is present;
 # otherwise the bot uses keyword matching (handle_query).
 AGENT = None
@@ -122,11 +132,13 @@ from src.agent.plain import plainify
 audience = AudienceStore()
 
 
-def answer(text: str, role: str = "ic", project_config: str = "config.yaml") -> str:
+def answer(text: str, role: str = "ic", project_config: str = "config.yaml",
+           eng: dict | None = None) -> str:
     """Answer a question, scoped to a project and framed for the audience's role.
 
-    project_config isolates the query — Google channels get Google data,
-    Workday channels get Workday data. They never see each other's teams.
+    project_config isolates the AI-agent path; eng is the per-project keyword
+    engine bundle (from _project_engines) so keyword queries are scoped too —
+    Google channels get Google data, Workday channels get Workday data.
     """
     reply = None
     if AGENT is not None:
@@ -139,7 +151,7 @@ def answer(text: str, role: str = "ic", project_config: str = "config.yaml") -> 
         except Exception as e:
             print(f"[agent] error, falling back to keywords: {e}", flush=True)
     if not reply:
-        reply = handle_query(text)
+        reply = handle_query(text, eng)
     if is_non_technical(role) and AGENT is None:
         reply = plainify(reply)
     return reply
@@ -346,7 +358,21 @@ HELP_BODY = (
 )
 
 
-def handle_query(text: str) -> str:
+def handle_query(text: str, eng: dict | None = None) -> str:
+    # Unpack the engine bundle into locals so the body below is project-scoped
+    # without per-reference edits; defaults to config.yaml's engines.
+    eng = eng or _DEFAULT_ENGINES
+    providers = eng["providers"]
+    detector = eng["detector"]
+    digest_gen = eng["digest_gen"]
+    briefing_gen = eng["briefing_gen"]
+    discovery = eng["discovery"]
+    reuse_radar = eng["reuse_radar"]
+    alignment = eng["alignment"]
+    locator = eng["locator"]
+    health = eng["health"]
+    strategy = eng["strategy"]
+    router = eng["router"]
     q = text.lower()
 
     # Multi-project management
@@ -876,7 +902,8 @@ def handle_mention(event, say):
     channel_id = event.get("channel", "")
     role = audience.role_for(event.get("user", ""), channel_id)
     project = project_registry.for_channel(channel_id)
-    say(answer(text, role, project_config=project.config), thread_ts=thread_ts)
+    say(answer(text, role, project_config=project.config,
+               eng=_project_engines(channel_id)), thread_ts=thread_ts)
 
 
 def _ingest_slack_files(event) -> str:

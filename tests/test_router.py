@@ -134,3 +134,22 @@ def test_every_golden_command_returns_nonempty_str(bot):
     for phrase, _ in GOLDEN:
         out = bot.handle_query(phrase)
         assert isinstance(out, str) and out.strip(), f"{phrase!r} returned empty/non-str"
+
+
+def test_query_is_project_scoped(bot, monkeypatch):
+    """A query routed with another project's engine bundle must not see the
+    default (synthetic) project's teams — keyword-mode multi-tenant isolation."""
+    default_out = bot.handle_query("get me up to speed on Team Nova")
+    assert "Amara" in default_out  # Nova's owner in the synthetic org
+
+    # Register a second project (no file write) and build its engine bundle.
+    monkeypatch.setattr(bot.project_registry, "_save", lambda *a, **k: None)
+    bot.project_registry.register("GoogleTest", "config-google.yaml", channels=["C_GTEST"])
+    try:
+        eng = bot._project_engines("C_GTEST")
+        scoped_out = bot.handle_query("get me up to speed on Team Nova", eng=eng)
+        assert "Amara" not in scoped_out  # isolated: this project has no Team Nova
+    finally:
+        bot.project_registry.projects = [
+            p for p in bot.project_registry.projects if p.name != "GoogleTest"
+        ]
