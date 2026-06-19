@@ -37,12 +37,23 @@ app = App(token=os.environ.get("SLACK_BOT_TOKEN", "xoxb-test"),
 from src.projects import ProjectRegistry
 project_registry = ProjectRegistry(default_config="config.yaml")
 
+_ENGINE_CACHE: dict[str, dict] = {}
+
+
 def _project_engines(channel_id: str = "", channel_name: str = ""):
-    """Return all engines scoped to the project this channel belongs to."""
+    """Return all engines scoped to the project this channel belongs to.
+
+    Memoized per project config: the bundle (and its providers, which cache
+    manifests) is built once and reused, instead of reconstructing 11 engine
+    objects on every message.
+    """
     project = project_registry.for_channel(channel_id, channel_name)
-    p = project.providers()
     config = project.config
-    return {
+    cached = _ENGINE_CACHE.get(config)
+    if cached is not None:
+        return cached
+    p = project.providers()
+    bundle = {
         "providers": p,
         "project": project,
         "detector": DriftDetector(p),
@@ -56,6 +67,8 @@ def _project_engines(channel_id: str = "", channel_name: str = ""):
         "strategy": StrategyLens(p, config),
         "router": EventRouter(p),
     }
+    _ENGINE_CACHE[config] = bundle
+    return bundle
 
 def _preflight(config_path: str = "config.yaml") -> None:
     """Fail fast with a clear message when a provider is set to 'live' but its
