@@ -63,6 +63,59 @@ class TestDriftDetector:
         assert set(counts) <= {"design_drift", "missing_decision_log", "code_drift", "cross_team_pr"}
         assert len(issues) == 10 + counts["cross_team_pr"]
 
+    def test_run_all_golden_composition_frozen_time(self, monkeypatch):
+        """Deterministic companion to test_run_all_golden_composition.
+
+        The drift-robust test above bounds cross_team_pr at 0..2 because the
+        window in get_recent_prs is relative to datetime.now(), while the
+        fixture's merged_at dates are absolute — so the count decays over
+        wall-clock time and the path can go UNEXERCISED (count == 0).
+
+        Here we freeze "now" to 2026-05-28 so the 7-day window
+        (cutoff = 2026-05-21) captures BOTH merged cross-team PRs:
+          - NOVA-PR-31  @ 2026-05-27
+          - PHX-PR-42   @ 2026-05-24
+        and the cross_team_pr code path fires deterministically.
+
+        We freeze time by monkeypatching the `datetime` symbol that
+        get_recent_prs resolves — the one imported into
+        src.providers.local.github — with a subclass whose now() returns the
+        fixed instant. get_recent_prs reads datetime.now() live on every call
+        (the provider only caches the PR list, not the clock), so this fully
+        controls the window without touching provider source or fixture data.
+        """
+        from collections import Counter
+        from datetime import datetime, timezone
+        import src.providers.local.github as gh
+
+        FROZEN = datetime(2026, 5, 28, tzinfo=timezone.utc)
+
+        class _FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return FROZEN if tz is None else FROZEN.astimezone(tz)
+
+        monkeypatch.setattr(gh, "datetime", _FrozenDatetime)
+
+        issues = self.detector.run_all()
+        counts = Counter(i.type for i in issues)
+
+        # Time-invariant categories — unchanged by the frozen clock.
+        assert counts["design_drift"] == 4
+        assert counts["missing_decision_log"] == 6
+        assert counts["code_drift"] == 0
+
+        # Time-variant category — now pinned to exactly 2 by the frozen window.
+        assert counts["cross_team_pr"] == 2
+
+        # The two specific fixture PRs are the ones detected.
+        cross_team_ids = {i.id for i in issues if i.type == "cross_team_pr"}
+        assert cross_team_ids == {"pr-impact-NOVA-PR-31", "pr-impact-PHX-PR-42"}
+
+        # No other issue types; total is exactly 12.
+        assert set(counts) <= {"design_drift", "missing_decision_log", "code_drift", "cross_team_pr"}
+        assert len(issues) == 12
+
     def test_issues_have_required_fields(self):
         issues = self.detector.run_all()
         for issue in issues:
