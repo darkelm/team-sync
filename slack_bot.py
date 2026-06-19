@@ -896,8 +896,9 @@ if __name__ == "__main__":
         print(f"[startup] auth_test failed — bot can't identify itself, "
               f"self-intro on channel join disabled: {e}", flush=True)
 
-    # Start the proactive weekly-digest scheduler in the background
-    digest_scheduler = DigestScheduler(providers, "config.yaml")
+    # Start the proactive weekly-digest scheduler in the background.
+    # Registry-aware: runs digests for every registered project + the default.
+    digest_scheduler = DigestScheduler(project_registry, "config.yaml")
     digest_scheduler.start()
 
     handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
