@@ -10,9 +10,10 @@ class LocalGitHubProvider(GitHubProvider):
     def __init__(self, teams_dir: str):
         self.teams_dir = teams_dir
         self._prs: list[PullRequest] = []
+        self._loaded = False
 
     def _load(self) -> list[PullRequest]:
-        if self._prs:
+        if self._loaded:
             return self._prs
         for entry in os.scandir(self.teams_dir):
             if entry.is_dir():
@@ -21,6 +22,7 @@ class LocalGitHubProvider(GitHubProvider):
                     with open(path) as f:
                         for item in json.load(f):
                             self._prs.append(PullRequest(**item))
+        self._loaded = True
         return self._prs
 
     def get_pull_requests(self, team: Optional[str] = None, status: Optional[str] = None) -> list[PullRequest]:

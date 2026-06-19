@@ -9,9 +9,10 @@ class LocalFigmaProvider(FigmaProvider):
     def __init__(self, teams_dir: str):
         self.teams_dir = teams_dir
         self._components: list[FigmaComponent] = []
+        self._loaded = False
 
     def _load(self) -> list[FigmaComponent]:
-        if self._components:
+        if self._loaded:
             return self._components
         for entry in os.scandir(self.teams_dir):
             if entry.is_dir():
@@ -20,6 +21,7 @@ class LocalFigmaProvider(FigmaProvider):
                     with open(path) as f:
                         for item in json.load(f):
                             self._components.append(FigmaComponent(**item))
+        self._loaded = True
         return self._components
 
     def get_components(self, team: Optional[str] = None) -> list[FigmaComponent]:

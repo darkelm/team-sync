@@ -9,9 +9,10 @@ class LocalConfluenceProvider(ConfluenceProvider):
     def __init__(self, teams_dir: str):
         self.teams_dir = teams_dir
         self._pages: list[ConfluencePage] = []
+        self._loaded = False
 
     def _load(self) -> list[ConfluencePage]:
-        if self._pages:
+        if self._loaded:
             return self._pages
         for entry in os.scandir(self.teams_dir):
             if entry.is_dir():
@@ -22,6 +23,7 @@ class LocalConfluenceProvider(ConfluenceProvider):
                         with open(path) as f:
                             for item in json.load(f):
                                 self._pages.append(ConfluencePage(**item))
+        self._loaded = True
         return self._pages
 
     def get_pages(self, space: Optional[str] = None, team: Optional[str] = None) -> list[ConfluencePage]:
