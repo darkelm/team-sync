@@ -57,7 +57,10 @@ class HealthAssessor:
             try:
                 with open(self._snap_path) as f:
                     return json.load(f)
-            except (OSError, ValueError):
+            except (OSError, ValueError) as e:
+                # Snapshot file exists but couldn't be read/parsed — losing the
+                # week-over-week trajectory silently would hide real corruption.
+                print(f"[health] could not load snapshots from {self._snap_path}, resetting: {e}", flush=True)
                 return {}
         return {}
 

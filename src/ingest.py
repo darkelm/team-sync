@@ -102,4 +102,6 @@ def ingest_upload(filename: str, data: bytes, team: str, config: str = "config.y
         try:
             os.unlink(tmp_path)
         except OSError:
+            # Intentional: best-effort cleanup of the temp upload file; a
+            # failure here (already gone / locked) shouldn't mask the result.
             pass

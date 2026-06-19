@@ -101,7 +101,10 @@ class EventRouter:
                     result.update(j.teams)
             result.discard(team_name)
             return sorted(result)
-        except Exception:
+        except Exception as e:
+            # Missing strategy files degrade to [] inside StrategyLens itself,
+            # so reaching here is a real failure that drops same-journey routing.
+            print(f"[events] _teams_on_same_journey: StrategyLens unavailable: {e}", flush=True)
             return []
 
     def _teams_in_problem_space(self, topic: str, exclude: str = "") -> list[str]:

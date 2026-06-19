@@ -57,8 +57,10 @@ class AudienceStore:
             try:
                 with open(path) as f:
                     self._data = json.load(f)
-            except (OSError, ValueError):
-                pass
+            except (OSError, ValueError) as e:
+                # Store file exists but couldn't be read/parsed — silently
+                # dropping saved user/channel roles would hide real corruption.
+                print(f"[audience] could not load audience store from {path}, using empty: {e}", flush=True)
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

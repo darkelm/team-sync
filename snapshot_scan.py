@@ -294,8 +294,10 @@ def _resolve_team_name(manifest_path: Path, providers: Providers) -> str:
             with open(manifest_path) as f:
                 data = yaml.safe_load(f)
             return data.get("team", manifest_path.parent.name)
-        except Exception:
-            pass
+        except Exception as e:
+            # The file exists but couldn't be parsed — falling back to the dir
+            # slug silently could mis-attribute events, so surface it.
+            log.warning("Could not parse team name from %s, using dir slug: %s", manifest_path, e)
     return manifest_path.parent.name
 
 

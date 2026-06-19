@@ -81,6 +81,8 @@ def looks_like_transcript(path: str) -> bool:
             with open(path, encoding="utf-8", errors="ignore") as f:
                 head = f.read(2000)
         except OSError:
+            # Intentional: this is a content-sniff predicate — an unreadable
+            # file simply isn't classified as a transcript (caller handles it).
             return False
         # Heuristic: several "Speaker:" lines
         speaker_lines = sum(1 for ln in head.splitlines() if _INLINE_SPEAKER.match(ln.strip()))

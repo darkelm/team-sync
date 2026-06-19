@@ -46,6 +46,8 @@ def _csv_is_jira(path: str) -> bool:
             header = f.readline().lower()
         return "issue key" in header or "summary" in header
     except OSError:
+        # Intentional: this is a CSV-shape sniff — an unreadable file just
+        # isn't treated as a Jira export (caller falls back to roster).
         return False
 
 
@@ -88,6 +90,8 @@ class ManifestBuilder:
                     with open(p, encoding="utf-8", errors="ignore") as f:
                         self.context_text = f.read()
                 except OSError:
+                    # Intentional: README capture is optional AI-enrichment
+                    # context; if it can't be read we just skip enrichment.
                     pass
                 return
 

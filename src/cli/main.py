@@ -280,8 +280,10 @@ def build_manifest(
     known = []
     try:
         known = [t.team for t in _get_providers(config).manifests.get_all_teams()]
-    except Exception:
-        pass
+    except Exception as e:
+        # Non-fatal: builder still runs without known teams, but dependency
+        # detection in the transcript adapter is weaker — make the gap visible.
+        console.print(f"[dim][cli] couldn't load known teams (dependency hints disabled): {e}[/dim]")
 
     builder = ManifestBuilder(team, known_teams=known)
     for s in sources:
@@ -415,6 +417,8 @@ def onboard(
             try:
                 line = input()
             except EOFError:
+                # Intentional: EOF (Ctrl-D / piped input ending) is the normal
+                # way to finish interactive paste — not an error to report.
                 break
             if line == "" and lines and lines[-1] == "":
                 break

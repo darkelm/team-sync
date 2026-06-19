@@ -165,7 +165,8 @@ class LiveFigmaProvider(FigmaProvider):
         if self.manifests:
             try:
                 teams = self.manifests.get_all_teams()
-            except Exception:
+            except Exception as exc:
+                log.warning("Figma._library_file_keys: could not read team manifests: %s", exc)
                 teams = []
             for team in teams:
                 url = team.design_system_library or ""
@@ -186,7 +187,8 @@ class LiveFigmaProvider(FigmaProvider):
             return result
         try:
             teams = self.manifests.get_all_teams()
-        except Exception:
+        except Exception as exc:
+            log.warning("Figma._team_file_map: could not read team manifests: %s", exc)
             return result
         for team in teams:
             entries: list[tuple[str, str]] = []
@@ -210,7 +212,8 @@ class LiveFigmaProvider(FigmaProvider):
             return using
         try:
             teams = self.manifests.get_all_teams()
-        except Exception:
+        except Exception as exc:
+            log.warning("Figma._used_by_teams_for: could not read team manifests: %s", exc)
             return using
         for team in teams:
             name_lower = component_name.lower()
@@ -327,8 +330,8 @@ class LiveFigmaProvider(FigmaProvider):
                                 team_name = t.team
                                 file_name = ff.name or file_name
                                 break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.debug("Could not resolve owning team for %s: %s", file_key, exc)
 
             for item in components:
                 cs_id = item.get("component_set_id", "")
