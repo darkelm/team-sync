@@ -180,7 +180,11 @@ def _cross_journey_components(components: list[dict | str], providers: Providers
     try:
         from src.agent.strategy import StrategyLens
         lens = StrategyLens(providers)
-    except Exception:
+    except Exception as e:
+        # Missing strategy files degrade to [] inside StrategyLens itself, so
+        # reaching here means a real failure (bad YAML, import error) that loses
+        # cross-journey routing on a live webhook — surface it.
+        log.warning("webhook _cross_journey_components: StrategyLens unavailable: %s", e)
         return []
     results = []
     for comp in components:
@@ -205,7 +209,10 @@ def _journeys_for_component(comp_name: str, providers: Providers) -> list[str]:
         comp_lower = comp_name.lower()
         return [j.name for j in lens.journeys
                 if any(comp_lower in c.lower() or c.lower() in comp_lower for c in j.components)]
-    except Exception:
+    except Exception as e:
+        # See _cross_journey_components: missing files already degrade gracefully,
+        # so this path is a real failure that loses notification framing.
+        log.warning("webhook _journeys_for_component: StrategyLens unavailable: %s", e)
         return []
 
 
@@ -224,7 +231,10 @@ def _principles_for_component(comp_name: str, providers: Providers) -> list[str]
             if comp_tokens & kw_tokens:
                 relevant.append(p.name)
         return relevant
-    except Exception:
+    except Exception as e:
+        # See _cross_journey_components: missing files already degrade gracefully,
+        # so this path is a real failure that loses principle framing.
+        log.warning("webhook _principles_for_component: StrategyLens unavailable: %s", e)
         return []
 
 
