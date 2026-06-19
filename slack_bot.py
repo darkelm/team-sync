@@ -57,6 +57,38 @@ def _project_engines(channel_id: str = "", channel_name: str = ""):
         "router": EventRouter(p),
     }
 
+def _preflight(config_path: str = "config.yaml") -> None:
+    """Fail fast with a clear message when a provider is set to 'live' but its
+    token(s) are missing — instead of a cryptic KeyError inside a constructor."""
+    import yaml
+    required = {
+        "jira": ["ATLASSIAN_URL", "ATLASSIAN_EMAIL", "ATLASSIAN_API_TOKEN"],
+        "confluence": ["ATLASSIAN_URL", "ATLASSIAN_EMAIL", "ATLASSIAN_API_TOKEN"],
+        "github": ["GITHUB_TOKEN"],
+        "slack": ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"],
+        "figma": ["FIGMA_ACCESS_TOKEN"],
+    }
+    try:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f) or {}
+    except OSError:
+        return
+    problems = []
+    for name, mode in (cfg.get("providers") or {}).items():
+        if mode == "live":
+            missing = [v for v in required.get(name, []) if not os.environ.get(v)]
+            if missing:
+                problems.append((name, missing))
+    if problems and not os.getenv("SYNCBOT_TEST"):
+        lines = ["[preflight] These providers are set to 'live' in config.yaml but are missing tokens:"]
+        for name, missing in problems:
+            lines.append(f"  • {name}: missing {', '.join(missing)}")
+        lines.append("Fix: add the token(s) to .env, or set the provider back to 'local' in config.yaml.")
+        raise SystemExit("\n".join(lines))
+
+
+_preflight("config.yaml")
+
 # Default engines (no channel context — used by CLI, MCP, startup checks)
 providers = Providers("config.yaml")
 detector = DriftDetector(providers)
@@ -287,6 +319,31 @@ def _load_meeting_notes() -> list[dict]:
         except (OSError, ValueError):
             continue
     return notes
+
+
+HELP_BODY = (
+    "• `@syncbot who owns <component>` — find component owner\n"
+    "• `@syncbot where do I find <thing>` — locate research, assets, files, docs\n"
+    "• `@syncbot action items for <team>` — open actions from ingested meetings\n"
+    "• `@syncbot when does <team> ship` — upcoming deliverables\n"
+    "• `@syncbot what was decided about <topic>` — search decision logs\n"
+    "• `@syncbot scan for conflicts` — current drift and conflict report\n"
+    "• `@syncbot predict conflicts` — forecast collisions in planned work\n"
+    "• `@syncbot who should I talk to` — discover teams doing related work\n"
+    "• `@syncbot has anyone built <thing>` — reuse radar before you start\n"
+    "• `@syncbot check alignment` — goals laddering up to company objectives\n"
+    "• `@syncbot prep me for a sync with <team> and <team>` — meeting briefing\n"
+    "• `@syncbot get me up to speed on <team>` — team briefing\n"
+    "• `@syncbot is <team>'s design in sync` — Figma drift check\n"
+    "• `@syncbot digest for <team>` — weekly digest preview (inline, no posting)\n"
+    "• `@syncbot send <team>'s digest here` — deliver that team's digest to this channel\n"
+    "• `@syncbot stop sending digests here` — undo the above\n"
+    "• `@syncbot where do digests go` — list digest delivery channels\n"
+    "• `@syncbot post digests` — send digests to all configured channels now\n"
+    "• `@syncbot mute digests for <team>` / `resume digests for <team>` — pause control\n"
+    "• `@syncbot only alert <team> on high` — set digest severity threshold\n"
+    "• `@syncbot dependencies for <team>` — dependency map"
+)
 
 
 def handle_query(text: str) -> str:
@@ -723,35 +780,18 @@ def handle_query(text: str) -> str:
                 lines.extend(dependents if dependents else ["• none"])
                 return "\n".join(lines)
 
-    # Help / fallback
-    return (
-        "*SyncBot commands:*\n\n"
-        "• `@syncbot who owns <component>` — find component owner\n"
-        "• `@syncbot where do I find <thing>` — locate research, assets, files, docs\n"
-        "• `@syncbot action items for <team>` — open actions from ingested meetings\n"
-        "• `@syncbot when does <team> ship` — upcoming deliverables\n"
-        "• `@syncbot what was decided about <topic>` — search decision logs\n"
-        "• `@syncbot scan for conflicts` — current drift and conflict report\n"
-        "• `@syncbot predict conflicts` — forecast collisions in planned work\n"
-        "• `@syncbot who should I talk to` — discover teams doing related work\n"
-        "• `@syncbot has anyone built <thing>` — reuse radar before you start\n"
-        "• `@syncbot check alignment` — goals laddering up to company objectives\n"
-        "• `@syncbot prep me for a sync with <team> and <team>` — meeting briefing\n"
-        "• `@syncbot get me up to speed on <team>` — team briefing\n"
-        "• `@syncbot is <team>'s design in sync` — Figma drift check\n"
-        "• `@syncbot digest for <team>` — weekly digest preview (inline, no posting)\n"
-        "• `@syncbot send <team>'s digest here` — deliver that team's digest to this channel\n"
-        "• `@syncbot stop sending digests here` — undo the above\n"
-        "• `@syncbot where do digests go` — list digest delivery channels\n"
-        "• `@syncbot post digests` — send digests to all configured channels now\n"
-        "• `@syncbot mute digests for <team>` / `resume digests for <team>` — pause control\n"
-        "• `@syncbot only alert <team> on high` — set digest severity threshold\n"
-        "• `@syncbot dependencies for <team>` — dependency map"
-    )
+    # Help / fallback — honest about keyword mode + which mode you're in.
+    explicit_help = any(w in q for w in ["help", "what can you do", "what can i ask", "commands", "menu"])
+    mode = "🧠 AI (natural language)" if AGENT else "⌨️ keyword matching"
+    if explicit_help:
+        return f"*SyncBot commands*  ·  mode: {mode}\n\n" + HELP_BODY
+    return (f"I didn't catch that. I'm in *{mode}* mode, so I match specific phrasings — "
+            f"here's what I understand:\n\n" + HELP_BODY)
 
 
 INTRO = (
-    "👋 *Hi, I'm SyncBot* — I help keep teams in sync.\n"
+    f"👋 *Hi, I'm SyncBot* — I help keep teams in sync.  "
+    f"_(mode: {'🧠 AI' if AGENT else '⌨️ keyword'})_\n"
     "Ask me anything in plain language, for example:\n"
     "• _who owns the auth component?_\n"
     "• _who should I be talking to?_\n"
