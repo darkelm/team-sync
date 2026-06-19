@@ -80,7 +80,7 @@ Each adapter extracts candidate manifest fields *with provenance and confidence*
 
 ## Phase 3 — Understanding + discoverability (kills barrier #3) ✅ BUILT
 
-- **Claude agent** ✅ — Opus 4.8 with adaptive thinking, prompt caching on the system+tools prefix, and all 14 capabilities exposed as tools. Activates automatically when `ANTHROPIC_API_KEY` is set; the bot falls back to keyword matching (and on any agent error) otherwise. Set the key — no other change needed. Also the path to better transcript extraction and semantic duplicate detection.
+- **Claude agent** ✅ — Opus 4.8 with adaptive thinking, prompt caching on the system+tools prefix, and all 20 coordination capabilities exposed as tools. Activates automatically when `ANTHROPIC_API_KEY` is set; the bot falls back to keyword matching (and on any agent error) otherwise. Set the key — no other change needed. Also the path to better transcript extraction and semantic duplicate detection.
 - **Bot self-introduction** ✅ — posts a short "here's what I can do" with example questions when added to a channel. Solves discovery.
 - **Graceful fallback** ✅ — agent errors fall back to keyword answers rather than dead-ending.
 - **Next:** richer "I don't know but here's who might" responses.
@@ -112,9 +112,10 @@ Uses Anthropic **structured outputs** (`messages.parse()` with Pydantic) so Clau
 
 ## Phase 5 — Make it real (kills barrier #5) ◑ STARTED
 
-- **No-terminal setup — channel-neutral** ✅ — import logic lives in one channel-agnostic core (`src/ingest.py`); every surface is a thin adapter that hands it `(filename, bytes/path, team)`. Built adapters: **CLI** (delegates to the core), **Slack file upload** (DM the bot a file with "for Team X" → it imports; needs the `files:read` scope, now in the manifest), and **MCP** (`import_export` tool — any MCP client can trigger an import). A Teams/Discord/web-upload adapter is ~30 lines against the same core — Slack is not load-bearing.
+- **No-terminal data import — channel-neutral** ✅ — import logic lives in one channel-agnostic core (`src/ingest.py`); every surface is a thin adapter that hands it `(filename, bytes/path, team)`. Built adapters: **CLI** (delegates to the core), **Slack file upload** (DM the bot a file with "for Team X" → it imports; needs the `files:read` scope, now in the manifest), and **MCP** (`import_export` tool — any MCP client can trigger an import). A Teams/Discord/web-upload adapter is ~30 lines against the same core — Slack is not load-bearing.
+  - **Scope (honest):** this is no-terminal *data import* — ingesting a Jira CSV, Confluence export, git clone, or transcript. It is **not** no-terminal *onboarding*. Building a valid `team.yaml` (owner, components, dependencies, slack_channel, goals) still runs through the CLI manifest builder (`syncbot build-manifest`), which leaves `# TODO` fields wherever no source can infer a value. The DM-file path ingests data exports into an existing team; it does not author the manifest. Net: everyday use and data refresh are terminal-free; the one-time manifest setup is not yet.
 - **Deploy to Railway** ✅ config ready (`railway.json`, `Procfile`, `runtime.txt`, `requirements.txt`); ⬜ the browser steps + env vars are yours (see DEPLOY.md).
-- **Next — IT/Slack approval kit:** minimal-permission manifest, a one-pager on data handling (connectors-off posture, read-only, nothing leaves the environment), and the export-based path for locked-down orgs.
+- **IT/Slack approval kit** ◑ — least-privilege Slack manifest (`slack/manifest.json`) and a data-handling / data-flow posture doc ([SECURITY.md](SECURITY.md)) are now drafted; the export-based path for locked-down orgs is the connectors-off mode. Note the honest boundary documented there: in **keyword mode** nothing leaves the environment except calls to the providers you configure; in **AI mode** the query plus the retrieved coordination data (owners, tickets, decisions) is sent to the Anthropic API. Connectors-off mode needs no live provider at all.
 
 > **Scales beyond Slack by design.** The three things that matter — the answer engine (`handle_query`/`execute_tool`), the ingest core (`src/ingest.py`), and the tool surface (`execute_tool`) — are all channel-neutral. Slack, MCP, and the CLI are adapters over the same code; adding Teams or a web UI means writing an adapter, not re-implementing the product.
 
@@ -122,7 +123,7 @@ Uses Anthropic **structured outputs** (`messages.parse()` with Pydantic) so Clau
 
 ## Phase 6 — MCP server: supercharge *any* AI with our system (capability multiplier) ✅ BUILT
 
-The strategic capstone, and the concrete delivery of the original cross-platform vision ("transferable to Replit, Codex, Lovable, Gemini"). The 14 tools are now a **Model Context Protocol server** (`mcp_server.py`, built on the official MCP SDK / FastMCP, with `.mcp.json` for one-step client setup) so Claude Desktop, Cursor, Cline, Gemini, and any MCP client get the entire coordination engine — no rewrite, no per-platform port.
+The strategic capstone, and the concrete delivery of the original cross-platform vision ("transferable to Replit, Codex, Lovable, Gemini"). The 20 coordination tools (plus 2 utility tools, `import_export` and `emit_event`, for 22 in total) are now a **Model Context Protocol server** (`mcp_server.py`, built on the official MCP SDK / FastMCP, with `.mcp.json` for one-step client setup) so Claude Desktop, Cursor, Cline, Gemini, and any MCP client get the entire coordination engine — no rewrite, no per-platform port.
 
 - **Portability:** MCP is the open standard built exactly for this; one server, every compatible AI surface.
 - **Grounding for any model:** any connected LLM gets our ground truth (manifests, tickets, drift, decisions) instead of hallucinating org facts — the "supercharge AI back" half, generalized beyond our own bot.
@@ -135,7 +136,7 @@ The strategic capstone, and the concrete delivery of the original cross-platform
 
 - **7.A Audience auto-routing** ✅ — `src/agent/audience.py`: per-user role (with per-channel defaults), set via `@syncbot I'm a designer` / `set my role to MD`. Every answer auto-frames by role — non-technical roles get de-jargoned output; the Claude agent gets an audience hint so it leads with the right things (health/risk for leadership, design language for designers). Default "ic" = no behavior change.
 - **7.B Leadership rollup** ✅ — `src/agent/health.py` assesses each team 🟢/🟡/🔴 from signals we already compute, with top-3 plain-language risks, week-over-week trajectory, and who to talk to. No per-component noise. Surfaces: `how's <team> doing?`, `portfolio status`, plus `team_health`/`portfolio_status` as agent + MCP tools. Terminology configurable (`config.yaml → leadership`).
-- **7.B (proactive) Weekly exec digest** ✅ — the scheduler posts the portfolio rollup to `leadership.exec_channel` every Monday alongside the team digests (skipped if unset).
+- **7.B (proactive) Weekly exec digest** ✅ — the scheduler posts the portfolio rollup to `leadership.exec_channel` every Monday alongside the team digests (skipped if unset). *Caveat: the scheduler only runs while the bot process is alive. Until the bot is deployed as an always-on worker (Railway config ready, not yet deployed), "every Monday" holds only if a local session is running at that time.*
 - **7.C Plain language** ✅ — `src/agent/plain.py` de-jargons output for non-technical readers.
 - **7.D Web dashboard** — intentionally **out of scope** (leadership is served via Slack + MCP).
 

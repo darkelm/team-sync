@@ -1,6 +1,6 @@
 # SyncBot — Multi-Team Coordination Agent
 
-Keeps design and dev teams in sync on large projects. Detects drift, predicts conflicts, surfaces decisions, and delivers weekly briefings — automatically.
+Keeps design and dev teams in sync on large projects. Detects drift, predicts conflicts, surfaces decisions, and delivers weekly briefings. Proactive briefings run on a schedule, but only while the bot process is alive — it isn't deployed as an always-on service yet (see "Current Status").
 
 Built to prove out with synthetic data first, then swap in real integrations via a provider adapter pattern (one config line per integration).
 
@@ -11,6 +11,7 @@ Built to prove out with synthetic data first, then swap in real integrations via
 - **[VS-COPILOT.md](VS-COPILOT.md)** — how this differs from Copilot / Claude-in-Slack / ChatGPT connectors (the most-asked question)
 - **[ADOPTION.md](ADOPTION.md)** — the plan to remove pilot barriers (manifest builder, freshness, NLU, fatigue, hosting)
 - **[DEPLOY.md](DEPLOY.md)** — cloud deployment (Railway/Render/Fly)
+- **[SECURITY.md](SECURITY.md)** — data-flow & security posture for IT review (what leaves the environment in each mode)
 - **[SPECS.md](SPECS.md)** — detailed implementation specs for all remaining work
 - **[DEMO.md](DEMO.md)** — live demo cheat sheet
 
@@ -32,7 +33,9 @@ On large projects with multiple teams:
 ## What This Does
 
 ### Automatic (no one has to ask)
-- **Monday digest** — each team's Slack channel gets a weekly summary: what changed in systems they depend on, open conflicts, design system updates
+> **Reality check:** these proactive features are built and scheduled, but the bot currently runs as a **local process, not a deployed service**. They only fire while that process is alive — there is no 24/7 worker yet. Deploying to Railway (config ready; see [DEPLOY.md](DEPLOY.md)) is what makes "automatic" literally always-on.
+
+- **Monday digest** — each team's Slack channel gets a weekly summary: what changed in systems they depend on, open conflicts, design system updates *(fires on schedule only while the local process is running; not yet deployed)*
 - **Dependency alerts** — PR merged touching a shared component → Slack alert fires to dependent teams
 - **Design system change alerts** — Figma library updated → affected teams notified
 - **Conflict detection** — breaking changes flagged when they lack a decision log
@@ -185,8 +188,8 @@ Weekly digest generator: per-team Slack message with dev section + design sectio
 - [x] **Multi-Source Manifest Builder** (ADOPTION Phase 1) — fuses repo/git/CODEOWNERS/roster/Jira/transcript into a provenance-annotated draft `team.yaml`; kills the cold-start barrier
 - [x] **Living manifests** (ADOPTION Phase 2) — `refresh-manifest` diffs reality vs manifest and proposes updates; `last_verified` freshness stamps; staleness flagged in `validate`
 
-- [x] **Claude agent** (ADOPTION Phase 3) — Opus 4.8 + adaptive thinking + prompt caching; all 14 capabilities exposed as tools; auto-activates when `ANTHROPIC_API_KEY` is set, keyword fallback otherwise; bot self-introduces on channel join
-- [x] **MCP server** (ADOPTION Phase 6) — all 14 tools exposed via Model Context Protocol; usable from Claude Desktop, Cursor, Cline, Gemini; the cross-platform portability unlock
+- [x] **Claude agent** (ADOPTION Phase 3) — Opus 4.8 + adaptive thinking + prompt caching; all 20 coordination tools exposed; auto-activates when `ANTHROPIC_API_KEY` is set, keyword fallback otherwise; bot self-introduces on channel join
+- [x] **MCP server** (ADOPTION Phase 6) — all 20 coordination tools (plus 2 utility tools, `import_export` and `emit_event` = 22 total) exposed via Model Context Protocol; usable from Claude Desktop, Cursor, Cline, Gemini; the cross-platform portability unlock
 
 - [x] **Structured outputs — meeting extraction + semantic reuse** (ADOPTION Phase 3.5) — `messages.parse()` returns the same `DecisionLog`/`ActionItem`/`ReuseMatch` schemas as the heuristics; AI when a key is present, heuristic fallback otherwise (`src/agent/ai_enhance.py`)
 - [x] **Notification tuning** (ADOPTION Phase 4) — per-team severity thresholds, pause/resume, section toggles, and a quality gate (digest only sends if something changed); tunable from Slack
@@ -289,6 +292,8 @@ Review it, confirm inferred fields, fill the `TODO`s, then `syncbot validate`. S
 The differentiator: SyncBot works **before IT approves a single API connector**, using the exports anyone can pull today.
 
 > **Who does this?** Only one person, once per team, at setup. Everyone else just talks to the bot in Slack — they never touch a command line.
+>
+> **What "no-terminal" does and doesn't mean:** the Slack/DM file-upload path *imports data exports* (a Jira CSV, a Confluence export, etc.) without a terminal. It does **not** build a full team manifest. Producing a valid `team.yaml` — `owner`, `components`, `dependencies`, `slack_channel`, goals — still goes through the CLI manifest builder (`syncbot build-manifest`), and any field no source can infer is left as a `# TODO` for a human to fill. So setup is *low-terminal*, not zero-terminal: the one-time manifest authoring still touches the CLI; everyday use does not.
 
 There's **one command**. It auto-detects whether you handed it a Jira CSV, a Confluence export folder, or a git clone, and derives the team folder name for you:
 
@@ -308,7 +313,7 @@ Each import normalizes into the same JSON the local providers read, so every fea
 
 ## Use it from any AI — the MCP server
 
-The portability layer. SyncBot's full coordination engine (all 14 tools) is exposed as a **Model Context Protocol server**, so Claude Desktop, Cursor, Cline, Gemini, or any MCP-compatible client gets the same grounded tools that back the Slack bot — no rewrite.
+The portability layer. SyncBot's full coordination engine (all 20 tools, plus 2 utility tools — `import_export` and `emit_event` — for 22 in total) is exposed as a **Model Context Protocol server**, so Claude Desktop, Cursor, Cline, Gemini, or any MCP-compatible client gets the same grounded tools that back the Slack bot — no rewrite.
 
 ```bash
 # Run directly (stdio)

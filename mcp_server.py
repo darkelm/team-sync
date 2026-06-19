@@ -2,8 +2,9 @@
 """SyncBot MCP server — exposes the coordination engine to any MCP client.
 
 This is the portability layer: Claude Desktop, Cursor, Cline, Gemini, or any
-MCP-compatible AI gets all 14 coordination tools — grounded in the same
-providers and the same `execute_tool` handlers that back the Slack agent.
+MCP-compatible AI gets all 20 coordination tools (plus the import_export
+and emit_event utility tools) — grounded in the same providers and the
+same `execute_tool` handlers that back the Slack agent.
 No new intelligence; a new doorway to the same brain.
 
 Run (stdio):  python mcp_server.py
