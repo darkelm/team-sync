@@ -319,10 +319,15 @@ def strip_mention(text: str) -> str:
     return re.sub(r"<@[A-Z0-9]+>", "", text).strip()
 
 
-def _load_meeting_notes() -> list[dict]:
-    import glob, json, yaml
-    with open("config.yaml") as f:
-        teams_dir = yaml.safe_load(f).get("data", {}).get("teams_dir", "./data/synthetic/teams")
+def _load_meeting_notes(providers_=None) -> list[dict]:
+    import glob, json
+    # Scope to the given project's teams dir; fall back to config.yaml for
+    # callers without a providers bundle (e.g. the default path).
+    teams_dir = getattr(providers_, "teams_dir", None)
+    if not teams_dir:
+        import yaml
+        with open("config.yaml") as f:
+            teams_dir = yaml.safe_load(f).get("data", {}).get("teams_dir", "./data/synthetic/teams")
     notes = []
     for path in glob.glob(os.path.join(teams_dir, "*", "meeting_notes.json")):
         try:
@@ -509,7 +514,7 @@ def handle_query(text: str, eng: dict | None = None) -> str:
 
     # Action items from ingested meetings
     if any(w in q for w in ["action item", "action items", "my actions", "what do i owe", "follow up", "follow-up", "to-do from", "todos from"]):
-        notes = _load_meeting_notes()
+        notes = _load_meeting_notes(providers)
         if not notes:
             return "No meeting notes ingested yet. Import a transcript to capture action items."
         teams = _match_teams(text)

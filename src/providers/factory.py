@@ -27,6 +27,7 @@ class Providers:
     def __init__(self, config_path: str = "config.yaml"):
         cfg = load_config(config_path)
         teams_dir = cfg.get("data", {}).get("teams_dir", "./data/synthetic/teams")
+        self.teams_dir = teams_dir  # exposed so callers can scope file reads to this project
 
         self.manifests: ManifestProvider = LocalManifestProvider(teams_dir)
         self.jira: JiraProvider = self._make_jira(_mode("jira", cfg), teams_dir)
