@@ -151,7 +151,7 @@ def answer(text: str, role: str = "ic", project_config: str = "config.yaml",
         except Exception as e:
             print(f"[agent] error, falling back to keywords: {e}", flush=True)
     if not reply:
-        reply = handle_query(text, eng)
+        reply = handle_query(text, eng, role)
     if is_non_technical(role) and AGENT is None:
         reply = plainify(reply)
     return reply
@@ -338,6 +338,14 @@ def _load_meeting_notes(providers_=None) -> list[dict]:
     return notes
 
 
+# Role-tailored highlight shown above the full help list (4.3).
+_ROLE_HELP = {
+    "designer": "*For design work:* `is <team>'s design in sync` · `has anyone built <thing>` · `where do I find <thing>` · `what was decided about <topic>`",
+    "pm": "*For delivery:* `when does <team> ship` · `get me up to speed on <team>` · `predict conflicts` · `dependencies for <team>`",
+    "lead": "*Leadership view:* `portfolio status` · `how's <team> doing` · `check alignment` · `journeys`",
+    "dev": "*For build work:* `who owns <component>` · `scan for conflicts` · `dependencies for <team>` · `what was decided about <topic>`",
+}
+
 HELP_BODY = (
     "• `@syncbot who owns <component>` — find component owner\n"
     "• `@syncbot where do I find <thing>` — locate research, assets, files, docs\n"
@@ -363,7 +371,7 @@ HELP_BODY = (
 )
 
 
-def handle_query(text: str, eng: dict | None = None) -> str:
+def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
     # Unpack the engine bundle into locals so the body below is project-scoped
     # without per-reference edits; defaults to config.yaml's engines.
     eng = eng or _DEFAULT_ENGINES
@@ -811,11 +819,15 @@ def handle_query(text: str, eng: dict | None = None) -> str:
                 lines.extend(dependents if dependents else ["• none"])
                 return "\n".join(lines)
 
-    # Help / fallback — honest about keyword mode + which mode you're in.
+    # Help / fallback — honest about keyword mode + which mode you're in,
+    # and lead with the commands most relevant to the reader's role.
     explicit_help = any(w in q for w in ["help", "what can you do", "what can i ask", "commands", "menu"])
     mode = "🧠 AI (natural language)" if AGENT else "⌨️ keyword matching"
+    highlight = _ROLE_HELP.get(role)
     if explicit_help:
-        return f"*SyncBot commands*  ·  mode: {mode}\n\n" + HELP_BODY
+        head = f"*SyncBot commands*  ·  mode: {mode}\n"
+        head += f"{highlight}\n\n_Full list:_\n" if highlight else "\n"
+        return head + HELP_BODY
     return (f"I didn't catch that. I'm in *{mode}* mode, so I match specific phrasings — "
             f"here's what I understand:\n\n" + HELP_BODY)
 

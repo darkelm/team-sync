@@ -84,6 +84,13 @@ def test_unknown_falls_back_to_help(bot):
     assert isinstance(out, str) and out.strip()
 
 
+def test_help_is_role_framed(bot):
+    assert "design" in bot.handle_query("help", role="designer").lower()
+    assert "leadership view" in bot.handle_query("help", role="lead").lower()
+    # default role gets no tailored highlight, just the full list
+    assert "Full list" not in bot.handle_query("help")
+
+
 # ── Digest targeting (needs the raw event for the channel id) ─────────────────
 
 def _ev(text, channel="C_TEST"):
