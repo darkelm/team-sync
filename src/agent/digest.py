@@ -137,20 +137,34 @@ class DigestGenerator:
         )
         return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
-    def post_all_digests(self, force: bool = False) -> None:
+    def post_all_digests(self, force: bool = False) -> dict:
         """Post each team's digest, respecting pause and the quality gate.
 
         force=True bypasses the gate (for on-demand `post digests`).
+
+        Returns a result summary so callers can report honestly:
+        {"sent": [(team, channel)], "failed": [(team, channel)],
+         "paused": [team], "unchanged": [team]}. A digest is only marked
+        sent (and its signature recorded) if delivery actually succeeded.
         """
+        results = {"sent": [], "failed": [], "paused": [], "unchanged": []}
         for team in self.p.manifests.get_all_teams():
             name = team.team
             if self.prefs.is_paused(name):
                 print(f"[digest] {name} is paused — skipping.", flush=True)
+                results["paused"].append(name)
                 continue
             digest = self.generate_for_team(name)
             sig = self._signature(digest)
             if not force and not self.prefs.changed_since_last(name, sig):
                 print(f"[digest] {name} — nothing new since last digest, skipping.", flush=True)
+                results["unchanged"].append(name)
                 continue
-            self.p.slack.post_digest(team.slack_channel, self.format_slack_message(digest))
-            self.prefs.record_signature(name, sig)
+            ok = self.p.slack.post_digest(team.slack_channel, self.format_slack_message(digest))
+            if ok:
+                self.prefs.record_signature(name, sig)
+                results["sent"].append((name, team.slack_channel))
+            else:
+                print(f"[digest] {name} — delivery to {team.slack_channel} FAILED.", flush=True)
+                results["failed"].append((name, team.slack_channel))
+        return results

@@ -15,7 +15,12 @@ class LiveConfluenceProvider(ConfluenceProvider):
 
     def _get(self, path: str, params: dict = None) -> dict:
         r = httpx.get(f"{self.base_url}/wiki/rest/api{path}", params=params, auth=self.auth)
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError:
+            # Surface live-API failures so they don't silently read as "no data" upstream.
+            print(f"[confluence] GET {path} -> HTTP {r.status_code}: {r.text[:200]}", flush=True)
+            raise
         return r.json()
 
     def _to_page(self, item: dict, team: str = "") -> ConfluencePage:

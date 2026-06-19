@@ -13,7 +13,9 @@ class LiveSlackProvider(SlackProvider):
         try:
             self.client.chat_postMessage(channel=channel, text=text, blocks=blocks)
             return True
-        except SlackApiError:
+        except SlackApiError as e:
+            reason = e.response.get("error", str(e)) if getattr(e, "response", None) else str(e)
+            print(f"[slack] post to {channel} failed: {reason}", flush=True)
             return False
 
     def post_digest(self, channel: str, digest_text: str) -> bool:

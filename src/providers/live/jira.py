@@ -15,7 +15,13 @@ class LiveJiraProvider(JiraProvider):
 
     def _get(self, path: str, params: dict = None) -> dict:
         r = httpx.get(f"{self.base_url}/rest/api/3{path}", params=params, auth=self.auth)
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError:
+            # Surface live-API failures (401 bad token, 403 restricted, 429 rate limit)
+            # so they don't silently read as "no data" upstream.
+            print(f"[jira] GET {path} -> HTTP {r.status_code}: {r.text[:200]}", flush=True)
+            raise
         return r.json()
 
     def _to_ticket(self, item: dict) -> Ticket:

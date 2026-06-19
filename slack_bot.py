@@ -531,9 +531,24 @@ def handle_query(text: str) -> str:
 
     # Post digests to all team channels on demand
     if any(w in q for w in ["post digest", "send digest", "digest all", "post all", "broadcast"]):
-        teams = providers.manifests.get_all_teams()
-        digest_gen.post_all_digests(force=True)
-        return f"Posted weekly digests to {len(teams)} team channels."
+        res = digest_gen.post_all_digests(force=True)
+        sent, failed, paused = res["sent"], res["failed"], res["paused"]
+        lines = []
+        if sent:
+            lines.append(f"✅ Posted to {len(sent)} channel(s): "
+                         + ", ".join(ch for _, ch in sent))
+        if failed:
+            lines.append(f"⚠️ Couldn't deliver to {len(failed)} channel(s): "
+                         + ", ".join(f"{ch} (not found, or I'm not in it)" for _, ch in failed))
+        if paused:
+            lines.append(f"⏸️ Skipped (digests paused): {', '.join(paused)}")
+        if not lines:
+            return "No teams are configured to receive digests yet."
+        if failed and not sent:
+            lines.append("\n_To fix: create the channel(s) and `/invite @syncbot`, "
+                         "or point the team's `slack_channel` at a channel I'm in. "
+                         "Tip: `@syncbot digest for <team>` shows a digest right here without posting._")
+        return "\n".join(lines)
 
     # Scan / conflicts
     if any(w in q for w in ["scan", "conflict", "issues", "what's broken", "whats broken", "problems"]):
@@ -785,8 +800,9 @@ if __name__ == "__main__":
     print(f"Understanding: {mode}")
     try:
         BOT_USER_ID = app.client.auth_test()["user_id"]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[startup] auth_test failed — bot can't identify itself, "
+              f"self-intro on channel join disabled: {e}", flush=True)
 
     # Start the proactive weekly-digest scheduler in the background
     digest_scheduler = DigestScheduler(providers, "config.yaml")
