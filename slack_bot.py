@@ -110,24 +110,6 @@ def answer(text: str, role: str = "ic", project_config: str = "config.yaml") -> 
     return reply
 
 
-def answer(text: str, role: str = "ic") -> str:
-    """Answer a question, framed for the audience's role (data is identical; framing differs)."""
-    reply = None
-    if AGENT is not None:
-        try:
-            AGENT.reset()
-            hint = agent_hint(role)
-            reply = AGENT.ask(f"{hint}\n\n{text}" if hint else text)
-        except Exception as e:
-            print(f"[agent] error, falling back to keywords: {e}", flush=True)
-    if not reply:
-        reply = handle_query(text)
-    # De-jargon for non-technical audiences (keyword path; the agent already got the hint).
-    if is_non_technical(role) and AGENT is None:
-        reply = plainify(reply)
-    return reply
-
-
 def _match_teams(text: str) -> list[str]:
     """Teams referenced in text — full/short name or fuzzy (tolerates typos)."""
     from src.agent.fuzzy import resolve_teams
