@@ -26,7 +26,10 @@ from src.agent.discovery import CollaboratorDiscovery, ReuseRadar
 from src.agent.alignment import AlignmentChecker
 from src.agent.findability import FindabilityLocator
 
-app = App(token=os.environ["SLACK_BOT_TOKEN"])
+# token_verification calls Slack's auth.test at construction; disable it under
+# SYNCBOT_TEST so the module can be imported offline by the test suite.
+app = App(token=os.environ.get("SLACK_BOT_TOKEN", "xoxb-test"),
+          token_verification_enabled=not os.getenv("SYNCBOT_TEST"))
 
 # ── Multi-project registry ────────────────────────────────────────────────────
 # Every query is scoped to a project. Google channels → Google data only.
