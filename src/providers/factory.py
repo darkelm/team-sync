@@ -13,6 +13,8 @@ from .local.slack import LocalSlackProvider
 
 
 def _mode(key: str, config: dict) -> str:
+    # config.yaml `providers:` is the source of truth; a *_PROVIDER env var is an
+    # optional per-process override (see .env.example).
     return os.getenv(f"{key.upper()}_PROVIDER") or config.get("providers", {}).get(key, "local")
 
 

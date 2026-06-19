@@ -297,3 +297,4 @@ class TeamDigest(BaseModel):
     open_conflicts: list[DriftIssue] = Field(default_factory=list)
     predicted_conflicts: list[ConflictPrediction] = Field(default_factory=list)
     action_items: list[str] = Field(default_factory=list)
+    staleness: str | None = None  # manifest-freshness note, surfaced in the digest footer

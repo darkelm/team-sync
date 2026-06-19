@@ -27,7 +27,11 @@ from src.providers.factory import Providers
 from src.agent.tools import execute_tool
 
 mcp = FastMCP("team-sync")
-providers = Providers("config.yaml")
+# Project-selectable: one MCP server instance serves one project/engagement.
+# Point SYNCBOT_CONFIG at config-<client>.yaml to scope this server to that
+# project's data; defaults to config.yaml.
+CONFIG = os.environ.get("SYNCBOT_CONFIG", "config.yaml")
+providers = Providers(CONFIG)
 
 
 def _run(tool: str, **inputs) -> str:

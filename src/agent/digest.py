@@ -1,5 +1,5 @@
 """Weekly digest generator — produces per-team summaries for Slack."""
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from ..core.schemas import TeamDigest
 from ..providers.factory import Providers
@@ -73,6 +73,17 @@ class DigestGenerator:
         for conflict in predictions:
             action_items.append(f"[PREDICTED] {conflict.suggested_action}")
 
+        # Manifest freshness — surface stale ownership/dep data so the digest
+        # isn't quietly authoritative on rotted manifests.
+        if team.last_verified is None:
+            staleness = ("⚠️ This team's manifest has never been verified — run "
+                         "`syncbot refresh-manifest` so ownership and dependencies are trustworthy.")
+        elif team.last_verified < date.today() - timedelta(days=30):
+            staleness = (f"⚠️ This team's manifest was last verified {team.last_verified} "
+                         "(>30 days ago) — run `syncbot refresh-manifest`.")
+        else:
+            staleness = None
+
         return TeamDigest(
             team=team_name,
             week_of=week_of,
@@ -82,6 +93,7 @@ class DigestGenerator:
             open_conflicts=team_issues,
             predicted_conflicts=predictions,
             action_items=action_items,
+            staleness=staleness,
         )
 
     def format_slack_message(self, digest: TeamDigest) -> str:
@@ -121,6 +133,10 @@ class DigestGenerator:
         if digest.action_items:
             lines.append("*✅ Action Items*")
             lines.extend([f"  • {a}" for a in digest.action_items[:5]])
+
+        if digest.staleness:
+            lines.append("")
+            lines.append(digest.staleness)
 
         lines.append("")
         lines.append("_Ask @syncbot anything: `@syncbot who owns <component>` | `@syncbot when does <team> ship` | `@syncbot scan for conflicts`_")
