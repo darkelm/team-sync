@@ -97,14 +97,142 @@ scopes. Event subscriptions are limited to `app_mention`, `message.im`, and
 
 ## Token handling
 
-- **Secrets live in `.env`**, which is **gitignored** (see `.gitignore` line 1). `.env.example` documents the variable names with no values. No tokens are committed.
-- Tokens used: Atlassian (`ATLASSIAN_*`), `GITHUB_TOKEN`, Slack (`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`), `FIGMA_ACCESS_TOKEN`, `ANTHROPIC_API_KEY` — only the ones for providers set to `live` are needed.
-- **Token rotation is currently OFF.** The Slack manifest sets `token_rotation_enabled: false` (see `slack/manifest.json`). This is acceptable for a local pilot but **not for a real client engagement.**
-- **Recommended rotation plan before any real engagement:**
-  1. Enable Slack token rotation (`token_rotation_enabled: true`) and implement refresh-token handling, or move to short-lived tokens.
-  2. Move all secrets out of a flat `.env` into the host's secret manager (Railway/Render variables, or the client's vault) once deployed; do not bake tokens into images.
-  3. Scope Atlassian/GitHub/Figma tokens to read-only, least-privilege service accounts; set expiries and a rotation cadence (e.g. 90 days).
-  4. Rotate any token that has touched a developer laptop before go-live.
+This is the operational runbook for every secret SyncBot uses: what each one is,
+the blast radius if it leaks, how to rotate it, where it should live, and the
+checklist to run before a client engagement. For *what data crosses the boundary*
+once these credentials are in use, see [What leaves the environment, by mode](#what-leaves-the-environment-by-mode)
+and the [TL;DR table](#tldr-for-reviewers) — this section is not duplicated there;
+it covers credentials, not data flow.
+
+### Secret inventory
+
+All secret names come from [`.env.example`](.env.example). Only the secrets for
+the providers you set to `live` in `config.yaml` are required; in keyword +
+connectors-off mode the system can run with none of the provider tokens set.
+
+There are two distinct credential families:
+
+1. **Outbound provider credentials** — SyncBot uses these to *call* a provider
+   API (read Jira, post to Slack, etc.). Held by `slack_bot.py` / the providers
+   layer.
+2. **Inbound webhook secrets** — used by `webhook_server.py` (a **separate
+   process** from the Slack bot) to *verify* that an incoming push event really
+   came from the provider. These authenticate the sender, they don't grant
+   SyncBot any access; the risk if they leak is **spoofed inbound events**, not
+   data exfiltration.
+
+#### Outbound provider credentials
+
+| Secret(s) | Provider | What it grants | Blast radius if leaked |
+|---|---|---|---|
+| `ATLASSIAN_API_TOKEN` (with `ATLASSIAN_URL`, `ATLASSIAN_EMAIL`) | Atlassian (Jira + Confluence) | API access **as that user**, across every Jira project and Confluence space the account can see — an Atlassian API token inherits the full account permissions; it is not scopable per-project. | Read (and, if the account can write, write/delete) of all client tickets, boards, and Confluence pages the account can reach. High — treat as account-equivalent. Use a dedicated least-privilege service account, never a person's. |
+| `GITHUB_TOKEN` (with `GITHUB_ORG`) | GitHub | Repo/API access at whatever scopes the PAT (or fine-grained token / App installation token) was minted with. | Read of code, PRs, and metadata for every repo the token can reach; if write scopes were granted, code push / release / settings changes. Scope tightly — read-only, only the repos in scope. |
+| `SLACK_BOT_TOKEN` (`xoxb-…`) | Slack | The bot's workspace access, bounded by the least-privilege scopes in [`slack/manifest.json`](slack/manifest.json) (post messages, resolve names, read DMs to the bot — **no** channel-history harvesting, **no** admin). See [Slack scopes](#slack-scopes-least-privilege). | Post as the bot and read what those scopes allow in the installed workspace. Bounded by scope, but still a foothold in the client workspace — rotate on any suspicion. |
+| `SLACK_APP_TOKEN` (`xapp-…`) | Slack | Socket Mode connection token (`connections:write`) — opens the websocket the bot listens on. | Lets a holder open the event socket for the app. Rotate via the app's App-Level Tokens page. |
+| `SLACK_SIGNING_SECRET` | Slack | Verifies that inbound Slack requests are genuinely from Slack (request signing). Not used in Socket Mode, but present for the HTTP path. | If leaked, an attacker could forge requests that look like they came from Slack on the HTTP event path. Rotate from the app's Basic Information page. |
+| `FIGMA_ACCESS_TOKEN` | Figma | Personal access token — read access to files/projects the issuing account can see (used to read design-system libraries and team manifests). | Read of all Figma files the account can reach. Use a dedicated account scoped to only the relevant files; tokens are account-wide, so isolate the account. |
+| `ANTHROPIC_API_KEY` (optional `ANTHROPIC_MODEL`) | Anthropic | Calls to the Claude API on the practice's billing account; **also the switch that turns on AI mode** (see [AI mode](#ai-mode-when-anthropic_api_key-is-set)). | Billable API usage on the key's account, and — separately — note that *setting* this key changes the data-egress posture (queries + retrieved coordination data go to Anthropic). Treat unsetting it as both a cost control and a data-classification control. |
+
+#### Inbound webhook secrets (`webhook_server.py`)
+
+| Secret | Set where | Verification mechanism | Blast radius if leaked |
+|---|---|---|---|
+| `GITHUB_WEBHOOK_SECRET` | GitHub App / repo webhook settings | HMAC-SHA256 over the raw request body | A holder could forge GitHub push events into SyncBot (spoofed drift/notification triggers). No outbound access granted. |
+| `FIGMA_WEBHOOK_PASSCODE` | Figma webhook subscription (also `FIGMA_WEBHOOK_PASSCODE` for the C1 receiver) | `passcode` field in the JSON payload | Forged Figma push events. No outbound access granted. |
+| `JIRA_WEBHOOK_TOKEN` | Jira automation webhook config | Shared-secret header `X-Webhook-Token` | Forged Jira events. No outbound access granted. |
+| `WEBHOOK_SHARED_SECRET` | Calendar + generic webhook senders | Shared-secret header `X-Webhook-Token` | Forged calendar / generic events. No outbound access granted. |
+
+> The webhook secrets authenticate *senders*. They do not give the holder any
+> read access to client data — the worst case is spoofed inbound events, which
+> should be treated as an integrity / nuisance risk, not a data-leak risk.
+
+`FIGMA_LIBRARY_FILE_KEY`, `GITHUB_ORG`, `ATLASSIAN_URL`/`EMAIL`, the `*_PROVIDER`
+overrides, and the data-path vars are **configuration, not secrets** — they are
+not credentials and don't need rotation (though they may still be
+engagement-specific and should stay out of the repo).
+
+### Rotation plan
+
+**Cadence (recommended):** rotate all live-provider credentials on a fixed
+cadence — **90 days** as a default, shorter if the client's policy requires it —
+and **immediately** on any of: a token touching a developer laptop before go-live,
+a suspected exposure, or an offboarding of anyone who had access.
+
+**How to rotate each, in the provider's UI:**
+
+- **Atlassian (`ATLASSIAN_API_TOKEN`):** Atlassian account → *Security* →
+  *API tokens* → create a new token, update `.env` / the secret store, then
+  revoke the old token. Prefer a dedicated service account so rotation never
+  disrupts a person's access.
+- **GitHub (`GITHUB_TOKEN`):** *Settings* → *Developer settings* →
+  *Personal access tokens* (use **fine-grained** tokens with an expiry, or a
+  GitHub App installation token) → regenerate / mint new, update the store,
+  revoke the old. Set an expiry so rotation is enforced, not optional.
+- **Slack (`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`):**
+  in the Slack app config (api.slack.com/apps → the SyncBot app):
+  - Bot token — *OAuth & Permissions* → reinstall / rotate.
+  - App-level token — *Basic Information* → *App-Level Tokens*.
+  - Signing secret — *Basic Information* → *App Credentials* → roll secret.
+  - **Enable token rotation** (see below) so bot tokens become short-lived and
+    refresh automatically rather than being long-lived static strings.
+- **Figma (`FIGMA_ACCESS_TOKEN`):** Figma → *Settings* → *Security* →
+  *Personal access tokens* → generate new, update the store, revoke the old.
+- **Anthropic (`ANTHROPIC_API_KEY`):** Anthropic Console → *API Keys* →
+  create a new key, update the store, then disable/delete the old key.
+- **Webhook secrets (`GITHUB_WEBHOOK_SECRET`, `FIGMA_WEBHOOK_PASSCODE`,
+  `JIRA_WEBHOOK_TOKEN`, `WEBHOOK_SHARED_SECRET`):** rotate the value in the
+  provider's webhook config (locations in the inbound table above) **and** the
+  matching value in SyncBot's secret store in the same change — they must stay in
+  sync or events stop verifying.
+
+**Slack token rotation is currently OFF.** The manifest sets
+`token_rotation_enabled: false` ([`slack/manifest.json`](slack/manifest.json),
+`settings` block). This is acceptable for a local pilot but **not for a real
+client engagement** — leaving it off means the bot token is a long-lived static
+credential. **Recommended:** set `token_rotation_enabled: true` and implement
+refresh-token handling so bot tokens are short-lived and rotate automatically.
+
+### Storage
+
+- **Local / POC:** secrets in `.env` is **fine**. `.env` is **gitignored**
+  (`.gitignore` line 1, confirmed) and `.env.example` ships only variable names,
+  no values — no tokens are committed. This is the current state and is
+  appropriate for a single operator's machine running the local process.
+- **Real engagement:** do **not** rely on a flat `.env` and do **not** commit it.
+  Use a proper secret store:
+  - **Host environment injection** — Railway/Render service variables (or the
+    equivalent on whatever host runs the single worker), so secrets are injected
+    at runtime and never written to disk in the repo.
+  - **A vault** — the client's secrets manager (e.g. HashiCorp Vault, AWS/GCP/Azure
+    secret manager) where the client's policy requires centralized control,
+    auditing, and rotation hooks.
+  - **Never bake tokens into container images** or build artifacts.
+- **Least privilege per token:** scope every credential to the minimum it needs
+  — dedicated read-only service accounts for Atlassian/GitHub/Figma (never a
+  person's personal token), the minimal Slack scope set already defined in the
+  manifest, and a per-engagement Anthropic key if cost/usage isolation matters.
+  Tokens that can only read can't be used to write or delete if they leak.
+
+### Before a client engagement — checklist
+
+- [ ] **Rotate every token** off any shared, demo, or dev value. Assume anything
+      that has touched a laptop or a pilot is burned; mint fresh credentials for
+      the engagement.
+- [ ] **Use dedicated least-privilege service accounts** for Atlassian, GitHub,
+      and Figma (read-only where possible) — not personal accounts. Confirm the
+      Slack scopes still match the least-privilege set in the manifest.
+- [ ] **Enable Slack token rotation** (`token_rotation_enabled: true`) and verify
+      refresh handling works end-to-end.
+- [ ] **Move secrets into the host secret store or the client's vault**; confirm
+      `.env` is not committed and is not present in any image or artifact.
+- [ ] **Set expiries and a rotation cadence** (90 days or per client policy) for
+      every credential that supports one.
+- [ ] **Confirm webhook secrets are unique per engagement** and synced between
+      each provider's webhook config and SyncBot's store.
+- [ ] **Document the data-egress posture for the chosen operating mode** — i.e.
+      whether `ANTHROPIC_API_KEY` will be set (AI mode) and which providers are
+      `live` — per [What leaves the environment, by mode](#what-leaves-the-environment-by-mode),
+      and get it signed off against the client's data classification.
 
 ---
 
