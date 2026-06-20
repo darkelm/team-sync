@@ -12,6 +12,7 @@ data/notification_prefs.json
 data/health_snapshots.json
 data/audience_prefs.json
 data/unmatched_queries.jsonl
+data/provenance.jsonl
 data/stale_flags.json
 data/alert_dedup.json
 data/syncbot.log*

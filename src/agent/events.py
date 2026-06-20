@@ -56,6 +56,19 @@ TRIGGER_CATALOG = {
 }
 
 
+# Map the team-sync event vocabulary onto membrane change-kinds (contract §10, Q4).
+# The membrane rule shape matches `kind` as a plain string, so these can be the oracle's
+# token kinds (added/removed/changed/renamed) — keeping policies portable — or a team
+# vocabulary later. Default for an unmapped type is "changed" (a value-level edit).
+_EVENT_KIND: dict[str, str] = {
+    "design.library_published": "changed",
+    "design.component_changed": "changed",
+    "code.merged": "changed",
+    "work.created": "added",
+    "research.study_added": "added",
+}
+
+
 class EventRouter:
     def __init__(self, providers: Providers):
         self.p = providers
@@ -89,6 +102,64 @@ class EventRouter:
                 teams.update(j.teams)
         teams.discard(exclude)
         return sorted(teams)
+
+    def reach(self, component: str, exclude_team: str = "") -> int:
+        """Graded consequence signal for the membrane: the number of OTHER teams that
+        touch a component (contract §10, reach = |consumers|). Reuses the existing
+        `_consumers_of` (the reach numerator, already written) and returns its
+        cardinality. This is what the membrane's `blast_radius` is fed."""
+        return len(self._consumers_of(component, exclude=exclude_team))
+
+    # ── lane mapping (membrane integration, additive — see membrane.py) ──────────
+    #
+    # These build a membrane RouteContext for ONE event and call membrane.route(),
+    # returning the (single) RoutingDecision. They DO NOT change `route()` above —
+    # the existing notify-all behavior is untouched. The orchestrator wires the lane
+    # decision into the live event path (e.g. gate dispatch on lane, persist provenance).
+
+    def _event_route_item(self, event: "Event"):
+        """Build the membrane RouteItem for an event. `key` = the component subject;
+        `path` carries a tier head (so `tier_of` can bucket it) — defaulting to `raw`
+        when the event metadata gives no tier; `kind` maps the event type to a change
+        kind. All overridable via event.metadata ("tier", "kind")."""
+        from . import membrane
+        tier = (event.metadata.get("tier") or "raw").lower()
+        # The membrane reads tier off the path head; encode the event's consequence
+        # tier as that head so tier_of() resolves it (contract §7/§10).
+        path = f"{tier}/{event.subject}" if event.subject else tier
+        kind = event.metadata.get("kind") or _EVENT_KIND.get(event.type, "changed")
+        return membrane.RouteItem(key=event.subject, path=path, kind=kind, mode=event.metadata.get("mode"))
+
+    def route_lane(self, event: "Event", policy=None, *, proposed_by=None, now=None):
+        """Map an event to a membrane lane decision (thin adapter, contract §6).
+
+        Computes reach via `self.reach(...)`, assembles a RouteContext (P1 floor from
+        `event.metadata['p1']`, novelty from `event.metadata['novel']`, confidence left
+        ABSENT — team-sync wires none, which is NEUTRAL by design), and calls
+        `membrane.route()`. Returns the single RoutingDecision for this event.
+
+        `policy` defaults to the conservative `default_policy()` (everything → review)
+        — autonomy must be granted by an explicit policy the orchestrator passes in.
+        """
+        from . import membrane
+        if policy is None:
+            policy = membrane.default_policy()
+        item = self._event_route_item(event)
+        # The reach resolver's trust signal feeds confidence (the adaptation layer,
+        # contract §10): an UNTRUSTED resolution (the webhook's Files-API fail-safe
+        # sets metadata.resolution == "review" when it couldn't resolve the touched
+        # component) is PRESENT-low confidence, which vetoes auto and routes to review
+        # WITH honest provenance. "resolved" or absent stays NEUTRAL (no veto) so a
+        # cleanly-resolved low-reach change can still earn auto under a policy.
+        confidence = {item.key: 0.0} if event.metadata.get("resolution") == "review" else None
+        ctx = membrane.RouteContext(
+            blast_radius={item.key: self.reach(event.subject, exclude_team=event.team)},
+            p1_keys=[item.key] if event.metadata.get("p1") else [],
+            confidence=confidence,
+            novel_keys=[item.key] if event.metadata.get("novel") else None,
+        )
+        decisions = membrane.route([item], ctx, policy, proposed_by=proposed_by, now=now)
+        return decisions[0]
 
     def _teams_on_same_journey(self, team_name: str) -> list[str]:
         """All teams that share at least one journey with this team."""
@@ -279,8 +350,25 @@ class EventRouter:
             lines.append(f"  → {tgt}  [{x.reason}]\n      {x.message.splitlines()[0]}")
         return "\n".join(lines)
 
-    def dispatch(self, event: Event) -> int:
-        """Actually post the notifications via the Slack provider. Returns count sent."""
+    def dispatch(self, event: Event, policy=None) -> int:
+        """Post notifications, gated by the membrane lane; record provenance.
+
+        Every event is routed to a lane (`route_lane`) and the decision is recorded
+        append-only ("who/what decided, and why"). The lane then gates the live ping:
+        `auto`/`digest` do NOT ping (autonomy / batched recap); `review`/`blocked`/
+        `propose` notify as before. With the conservative `default_policy` (everything
+        → review) behaviour is unchanged — autonomy only comes from a human-granted
+        toggle policy passed in as `policy`.
+        """
+        from . import membrane
+        from .provenance import ProvenanceStore
+        decision = self.route_lane(event, policy)
+        try:
+            ProvenanceStore().append(decision.provenance)
+        except OSError as e:
+            print(f"[events] provenance append failed: {e}", flush=True)
+        if decision.lane in (membrane.Lane.AUTO, membrane.Lane.DIGEST):
+            return 0  # autonomy / batched recap — no live ping
         sent = 0
         for x in self.route(event):
             if x.channel:
