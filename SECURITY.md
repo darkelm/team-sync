@@ -28,6 +28,24 @@ at all.
 
 ---
 
+## Deploying inside an enterprise that restricts MCPs / LLM egress
+
+This document is the **data-flow** posture. Its companion,
+**[`docs/deployment-compliance.md`](docs/deployment-compliance.md)**, is the
+**approval-decision** brief for an enterprise (e.g. Accenture) IT review where
+third-party MCPs/plugins are restricted and external LLM egress may be. It
+separates the three risk decisions that usually get collapsed into one "no":
+
+1. **Third-party vendor MCP / marketplace plugin** (the optional Atlassian Rovo MCP — highest scrutiny; **off by default**),
+2. **team-sync as a self-hosted app** (your own app, scoped tokens + webhooks — a more-approvable posture),
+3. **External LLM egress** (AI mode → Anthropic; a separate gate — if disallowed, **keyword mode** runs with zero external AI calls).
+
+It also covers the keyword-only zero-egress feature set, a per-mode egress map, the
+`SYNCBOT_PROVENANCE_PATH` durability note, and a short "what to confirm with
+security" checklist. **Read it alongside this file** before a deployment review.
+
+---
+
 ## What data lives where
 
 SyncBot reads from a provider layer that can be pointed at either **local files**
