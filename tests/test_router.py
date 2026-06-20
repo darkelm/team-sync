@@ -67,6 +67,7 @@ GOLDEN = [
     ("ship date for Team Phoenix",                      ["PHX-"]),
     ("catch me up on Team Horizon",                     ["Horizon"]),
     ("what relies on Team Phoenix",                     ["Depends on"]),
+    ("what's being deprecated",                         ["token-validation", "sunset"]),
 ]
 
 

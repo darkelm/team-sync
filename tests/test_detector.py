@@ -14,6 +14,16 @@ class TestDriftDetector:
         issues = self.detector.run_all()
         assert isinstance(issues, list)
 
+    def test_sunset_report_flags_deprecated_with_exposure(self):
+        """token-validation is marked deprecated in Team Atlas's manifest and
+        Team Phoenix declares a dependency on it — flagged with exposure."""
+        report = self.detector.sunset_report()
+        item = next((r for r in report if r["component"] == "token-validation"), None)
+        assert item is not None
+        assert item["owner_team"] == "Team Atlas"
+        assert item["replacement"] == "token-validation-v2"
+        assert "Team Phoenix" in item["dependent_teams"]
+
     def test_run_all_non_empty(self):
         """Synthetic org has intentional drift baked in."""
         issues = self.detector.run_all()

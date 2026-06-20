@@ -1,6 +1,6 @@
 """Drift and conflict detection — runs across all providers to find issues."""
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from ..core.schemas import DriftIssue, ConflictPrediction, DriftSeverity
 from ..providers.factory import Providers
 from .freshness import is_fresh
@@ -132,6 +132,39 @@ class DriftDetector:
         conflicts = []
         conflicts.extend(self._predict_planned_work_conflicts())
         return conflicts
+
+    def sunset_report(self) -> list[dict]:
+        """Components marked deprecated in their manifest, each with sunset date,
+        replacement, and the teams still depending on it (migration exposure).
+
+        Separate from run_all() — this reads manifest lifecycle metadata (RFC
+        8594-style Sunset semantics), not live drift, so the raw-scan golden
+        counts are untouched. This is the design-side deprecation lifecycle the
+        field says nobody does: detect who's on a sunsetting component and size
+        the migration before it breaks.
+        """
+        teams = self.p.manifests.get_all_teams()
+        report = []
+        for team in teams:
+            for c in list(team.components.code) + list(team.components.design):
+                if not getattr(c, "deprecated", False):
+                    continue
+                # Teams whose declared dependency on this owner covers this
+                # component (named explicitly, or an unscoped whole-team dep).
+                exposed = [
+                    other.team for other in teams
+                    for dep in other.dependencies
+                    if dep.team == team.team and (not dep.components or c.name in dep.components)
+                ]
+                report.append({
+                    "component": c.name,
+                    "owner_team": team.team,
+                    "sunset_date": c.sunset_date,
+                    "replacement": c.replacement,
+                    "dependent_teams": sorted(set(exposed)),
+                })
+        report.sort(key=lambda r: r["sunset_date"] or date.max)
+        return report
 
     def _detect_design_drift(self) -> list[DriftIssue]:
         return self.p.figma.get_drift_issues()

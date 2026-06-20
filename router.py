@@ -134,6 +134,7 @@ HELP_BODY = (
     "• `@syncbot mute digests for <team>` / `resume digests for <team>` — pause control\n"
     "• `@syncbot only alert <team> on high` — set digest severity threshold\n"
     "• `@syncbot dependencies for <team>` — dependency map\n"
+    "• `@syncbot what's being deprecated` — sunset watch: retiring components + who's still on them\n"
     "• `@syncbot mark <team> stale` — flag wrong/outdated data (clears with `<team> is verified`)\n"
     "• `@syncbot stats` — iteration backlog: unanswered questions + flagged teams"
 )
@@ -481,6 +482,23 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
             lines.append(f"• *{team}* → {ch}")
         lines.append("\n_Change with_ `@syncbot send <team>'s digest here` _·_ "
                      "`@syncbot stop sending digests here`.")
+        return "\n".join(lines)
+
+    # Deprecation / sunset lifecycle — what's being retired and who's still on it.
+    if any(p in q for p in ["sunset", "deprecat", "being retired", "what's deprecated",
+                            "whats deprecated", "retiring"]):
+        report = detector.sunset_report()
+        if not report:
+            return "Nothing is marked deprecated in any team manifest right now. ✓"
+        lines = [f"*🌅 Sunset / deprecation watch ({len(report)})*\n"]
+        for r in report:
+            when = f" — sunset {r['sunset_date']}" if r['sunset_date'] else ""
+            repl = f" → migrate to *{r['replacement']}*" if r['replacement'] else ""
+            lines.append(f"• *{r['component']}* ({r['owner_team']}){when}{repl}")
+            if r['dependent_teams']:
+                lines.append(f"    ⚠️ still used by: {', '.join(r['dependent_teams'])} — size the migration")
+            else:
+                lines.append("    _no dependent teams — safe to retire_")
         return "\n".join(lines)
 
     # Post digests to all team channels on demand

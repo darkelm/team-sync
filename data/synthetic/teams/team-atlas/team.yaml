@@ -37,6 +37,9 @@ components:
     - name: token-validation
       path: src/api/auth/validate
       description: "Server-side token validation service — NOTE: planning to change schema in Q3"
+      deprecated: true
+      sunset_date: 2026-09-01
+      replacement: token-validation-v2
     - name: data-pipeline
       path: src/pipeline
       description: ETL pipeline for analytics and reporting

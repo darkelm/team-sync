@@ -66,11 +66,18 @@ class CodeComponent(BaseModel):
     name: str
     path: str
     description: str
+    # Deprecation lifecycle (RFC 8594-style Sunset semantics for design systems).
+    deprecated: bool = False
+    sunset_date: Optional[date] = None   # when consumers must be off it
+    replacement: Optional[str] = None    # what to migrate to
 
 class DesignComponent(BaseModel):
     name: str
     figma_node_id: Optional[str] = None
     description: str
+    deprecated: bool = False
+    sunset_date: Optional[date] = None
+    replacement: Optional[str] = None
 
 class TeamComponents(BaseModel):
     code: list[CodeComponent] = Field(default_factory=list)
