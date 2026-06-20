@@ -128,6 +128,98 @@ def _extract_ticket_keys(*texts: str) -> list[str]:
     return keys
 
 
+def _divergence_flavour(
+    comp: FigmaComponent,
+    lib_by_name: dict[str, FigmaComponent],
+    lib_keys: set[str],
+) -> tuple[Optional[str], Optional[FigmaComponent]]:
+    """Classify how (if at all) a team component diverges from the library.
+
+    This is the single source of truth for the divergence decision, shared by
+    `get_drift_issues` (which turns the flavour into a DriftIssue) and by
+    `_judge_divergence` -> `get_components` (which stamps the flag onto returned
+    components). Keeping one classifier guarantees the drift report and the
+    per-component flag can never disagree.
+
+    Inputs
+    ------
+    comp        : a team component (is_library_component should be False).
+    lib_by_name : {library component name (lower) -> library FigmaComponent}.
+    lib_keys    : set of all library component keys (== FigmaComponent.id).
+
+    Returns
+    -------
+    (flavour, lib_match):
+      flavour   : one of "detached" (H1), "stale" (H2), "shadow" (H3), or None
+                  when the component does not diverge.
+      lib_match : the same-named library component when one exists, else None.
+
+    Branch order mirrors the original `get_drift_issues` if/elif chain exactly
+    (H1 then H2 then H3), so behaviour is preserved. A published library
+    component never diverges; a component with no same-named library match is
+    genuinely novel, not a divergence.
+    """
+    # A published library component is, by definition, the source of truth.
+    if comp.is_library_component:
+        return None, None
+
+    lib_match = lib_by_name.get(comp.name.lower())
+    if lib_match is None:
+        # No same-named library component -> not a divergence (truly novel).
+        return None, None
+
+    # H1 — DETACHED / UNLINKED: same name, different key from the library.
+    if comp.id not in lib_keys:
+        return "detached", lib_match
+
+    # H2 — STALE: team copy last modified before the library version.
+    if comp.last_modified < lib_match.last_modified:
+        return "stale", lib_match
+
+    # H3 — NAMING SHADOW: name matches a library component yet this is a
+    # non-library build that is neither detached nor stale.
+    return "shadow", lib_match
+
+
+def _judge_divergence(
+    comp: FigmaComponent,
+    lib_by_name: dict[str, FigmaComponent],
+    lib_keys: set[str],
+) -> tuple[bool, Optional[str]]:
+    """Per-component divergence judgement used to stamp FigmaComponent objects.
+
+    Thin wrapper over `_divergence_flavour` that returns the (diverges, notes)
+    contract `get_components` needs. The note names the divergence flavour
+    (detached / stale / shadow) so the governance membrane's `novel`/`propose`
+    routing can read a human-readable reason straight off the component.
+
+    Returns (False, None) for library components, components with no library
+    match, and clean live instances.
+    """
+    flavour, lib_match = _divergence_flavour(comp, lib_by_name, lib_keys)
+    if flavour is None or lib_match is None:
+        return False, None
+
+    if flavour == "detached":
+        notes = (
+            f"Detached from library '{lib_match.name}': team key={comp.id} "
+            f"differs from library key={lib_match.id} (likely a local copy, "
+            "not a live library instance)."
+        )
+    elif flavour == "stale":
+        notes = (
+            f"Stale vs library '{lib_match.name}': team copy modified "
+            f"{comp.last_modified.date()} predates library update "
+            f"{lib_match.last_modified.date()} (may be out of sync)."
+        )
+    else:  # "shadow"
+        notes = (
+            f"Shadows library '{lib_match.name}': non-library component shares "
+            "the name (possible intentional extension or accidental duplicate)."
+        )
+    return True, notes
+
+
 def _iter_frames(node: dict):
     """Yield FRAME / SECTION / COMPONENT nodes from a Figma document tree.
 
@@ -428,8 +520,12 @@ class LiveFigmaProvider(FigmaProvider):
         For each team (optionally filtered by `team`), iterates the team's
         figma_files and calls GET /v1/files/{key}/components.
 
-        Returns FigmaComponent objects with is_library_component=False.
-        Returns [] (with a log) on any API failure for a given file.
+        Returns FigmaComponent objects with is_library_component=False. Each is
+        post-stamped with the real `diverges_from_library` / `divergence_notes`
+        signal by comparing it against the design-system library index (see
+        `_stamp_divergence`). Returns [] (with a log) on any API failure for a
+        given file; divergence stamping degrades to the safe default (flag
+        stays False) and never raises.
         """
         results: list[FigmaComponent] = []
         team_file_map = self._team_file_map()
@@ -474,7 +570,55 @@ class LiveFigmaProvider(FigmaProvider):
                             item.get("name"), team_name, file_key, exc,
                         )
 
+        # Post-pass: stamp the real per-component divergence signal now that all
+        # team components are gathered and the library index can be built.
+        self._stamp_divergence(results)
         return results
+
+    def _stamp_divergence(self, team_comps: list[FigmaComponent]) -> None:
+        """Stamp `diverges_from_library` + `divergence_notes` on team components.
+
+        Builds the library name/key index (via get_library_components) and runs
+        the shared `_judge_divergence` classifier over each component, mutating
+        it in place. This is the post-pass that turns _map_component's
+        provisional False default into the truth.
+
+        Fully defensive: any API failure (or an empty library index) leaves the
+        components at their safe default (diverges_from_library=False,
+        divergence_notes=None) and is logged, never raised — matching the
+        Jira/Confluence house style.
+        """
+        if not team_comps:
+            return
+        try:
+            library_comps = self.get_library_components()
+        except Exception as exc:
+            log.warning(
+                "Figma._stamp_divergence: could not fetch library components, "
+                "leaving divergence flags at safe default (False): %s", exc,
+            )
+            return
+
+        # No library to compare against -> nothing diverges; leave defaults.
+        if not library_comps:
+            return
+
+        lib_by_name: dict[str, FigmaComponent] = {
+            c.name.lower(): c for c in library_comps
+        }
+        lib_keys: set[str] = {c.id for c in library_comps}
+
+        for comp in team_comps:
+            try:
+                diverges, notes = _judge_divergence(comp, lib_by_name, lib_keys)
+            except Exception as exc:
+                # Per-component guard: a bad component must not abort the pass.
+                log.debug(
+                    "Figma._stamp_divergence: skipping %s: %s", comp.name, exc,
+                )
+                continue
+            comp.diverges_from_library = diverges
+            comp.divergence_notes = notes
 
     def get_components_by_name(self, name: str) -> list[FigmaComponent]:
         """Return all components (library + team) whose name contains `name`.
@@ -528,8 +672,11 @@ class LiveFigmaProvider(FigmaProvider):
         lib_keys: set[str] = {c.id for c in library_comps}
 
         for comp in team_comps:
-            name_lower = comp.name.lower()
-            lib_match = lib_by_name.get(name_lower)
+            # Single source of truth for the divergence decision (shared with
+            # the per-component stamping in get_components). flavour is one of
+            # "detached" (H1), "stale" (H2), "shadow" (H3) or None; exactly one
+            # fires per component, preserving the original if/elif behaviour.
+            flavour, lib_match = _divergence_flavour(comp, lib_by_name, lib_keys)
 
             # ----------------------------------------------------------------
             # Heuristic 1 — DETACHED / UNLINKED
@@ -543,7 +690,7 @@ class LiveFigmaProvider(FigmaProvider):
             # be caught; library instances still have a different key by design
             # (Figma key = component definition id, not the instance node id).
             # ----------------------------------------------------------------
-            if lib_match and comp.id not in lib_keys:
+            if flavour == "detached":
                 issues.append(DriftIssue(
                     id=f"design-drift-detached-{comp.id}",
                     type="design_drift",
@@ -579,7 +726,7 @@ class LiveFigmaProvider(FigmaProvider):
             # timestamp, not semantic version; minor visual updates may not
             # bump `updated_at` in all contexts.
             # ----------------------------------------------------------------
-            elif lib_match and comp.last_modified < lib_match.last_modified:
+            elif flavour == "stale":
                 issues.append(DriftIssue(
                     id=f"design-drift-stale-{comp.id}",
                     type="design_drift",
@@ -615,7 +762,7 @@ class LiveFigmaProvider(FigmaProvider):
             # False negatives:  components with subtly different names
             # (e.g., "NotifBell" vs "NotificationBell") won't be caught.
             # ----------------------------------------------------------------
-            elif lib_match and not comp.is_library_component:
+            elif flavour == "shadow":
                 issues.append(DriftIssue(
                     id=f"design-drift-custom-{comp.id}",
                     type="design_drift",
@@ -871,6 +1018,17 @@ class LiveFigmaProvider(FigmaProvider):
 # Drift heuristic false-positive / false-negative profile (reference)
 # ---------------------------------------------------------------------------
 #
+# These three heuristics are now classified in ONE place — `_divergence_flavour`
+# — and consumed by two callers that can never disagree:
+#   * get_drift_issues  -> one DriftIssue per diverging component (H1/H2/H3
+#     mapping to high/medium/low severity, unchanged).
+#   * get_components (via _stamp_divergence -> _judge_divergence) -> stamps
+#     FigmaComponent.diverges_from_library (+ divergence_notes) so the
+#     governance membrane's novel/propose path reads a real per-component flag.
+# The classifier matches a team component to a library component by EXACT
+# lower-cased name; a library component never diverges and a no-match component
+# is treated as genuinely novel (flag stays False), not a divergence.
+#
 # Heuristic 1 — Detached/unlinked (key mismatch):
 #   FP: A team legitimately creates a local component with the same name as a
 #       library component (e.g., a scoped variant).  The key will differ even
@@ -888,9 +1046,10 @@ class LiveFigmaProvider(FigmaProvider):
 #       normalise to UTC but edge cases around DST may produce false flags.
 #
 # Heuristic 3 — Naming shadow:
-#   FP: Any team component whose name happens to match a library component
-#       name (even partially after the name_lower check) will be flagged.
-#       This has the highest FP rate of the three heuristics.
+#   FP: Any non-library team component whose name exactly matches a library
+#       component name (and is neither detached nor stale) will be flagged.
+#       This has the highest FP rate of the three heuristics — an intentional
+#       local extension reusing the base name reads as a shadow.
 #   FN: Components with similar but non-identical names escape detection.
 #
 # Overall: these heuristics are best used as a triage signal, not a
