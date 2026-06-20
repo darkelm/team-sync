@@ -1,0 +1,38 @@
+{
+  "file_id": "nova-design-system",
+  "file_name": "Nova Design System (CANONICAL)",
+  "team": "Team Nova",
+  "dev_status": [
+    {
+      "node_id": "789:500",
+      "name": "DataTable — Updated Hover",
+      "readiness": "ready_for_dev",
+      "last_modified": "2026-05-27T16:00:00Z",
+      "linked_tickets": ["NOVA-31"],
+      "assignee": "@ben.nakamura",
+      "notes": "blue-50 hover shipped; consuming teams must resync."
+    }
+  ],
+  "comments": [
+    {
+      "id": "nova-cmt-001",
+      "author": "@amara.osei",
+      "message": "Reminder to Atlas + Horizon: please resync DataTable to pick up the blue-50 hover.",
+      "created_at": "2026-05-27T16:30:00Z",
+      "resolved": false,
+      "priority": "medium",
+      "node_id": "789:500",
+      "mentions": ["@priya.shah"]
+    }
+  ],
+  "changes": [
+    {
+      "id": "nova-ver-001",
+      "label": "DataTable hover -> blue-50",
+      "description": "Row hover state changed from gray-100 to blue-50.",
+      "changed_at": "2026-05-27T16:00:00Z",
+      "author": "@ben.nakamura",
+      "affected_frames": ["DataTable — Updated Hover"]
+    }
+  ]
+}

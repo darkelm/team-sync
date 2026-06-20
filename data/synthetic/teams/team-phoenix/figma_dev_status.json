@@ -1,0 +1,84 @@
+{
+  "file_id": "abc123",
+  "file_name": "Phoenix Auth Flows",
+  "team": "Team Phoenix",
+  "dev_status": [
+    {
+      "node_id": "abc123:201",
+      "name": "Auth Modal — Session Expired",
+      "readiness": "ready_for_dev",
+      "last_modified": "2026-05-26T11:00:00Z",
+      "linked_tickets": ["PHX-118", "PHX-119"],
+      "assignee": "@mara.lopez",
+      "notes": "Marked ready after MFA review sign-off."
+    },
+    {
+      "node_id": "abc123:202",
+      "name": "Auth Modal — Re-auth",
+      "readiness": "needs_review",
+      "last_modified": "2026-05-24T09:30:00Z",
+      "linked_tickets": ["PHX-120"],
+      "assignee": "@mara.lopez",
+      "notes": "Awaiting design review before handoff."
+    },
+    {
+      "node_id": "abc123:203",
+      "name": "Auth Modal — MFA Challenge",
+      "readiness": "blocked",
+      "last_modified": "2026-05-22T15:45:00Z",
+      "linked_tickets": ["PHX-121"],
+      "assignee": "@dev.kim",
+      "notes": "Blocked on Nova Modal token update before dev can start."
+    }
+  ],
+  "comments": [
+    {
+      "id": "phx-cmt-001",
+      "author": "@dev.kim",
+      "message": "BLOCKER: MFA frame still references the old gray-100 hover — can't ship until Nova DataTable resync lands.",
+      "created_at": "2026-05-25T13:00:00Z",
+      "resolved": false,
+      "priority": "high",
+      "node_id": "abc123:203",
+      "mentions": ["@mara.lopez"]
+    },
+    {
+      "id": "phx-cmt-002",
+      "author": "@mara.lopez",
+      "message": "Nit: tighten the spacing on the re-auth header by 4px.",
+      "created_at": "2026-05-23T10:15:00Z",
+      "resolved": false,
+      "priority": "low",
+      "node_id": "abc123:202",
+      "mentions": []
+    },
+    {
+      "id": "phx-cmt-003",
+      "author": "@dev.kim",
+      "message": "Resolved: copy approved by legal.",
+      "created_at": "2026-05-20T08:00:00Z",
+      "resolved": true,
+      "priority": "medium",
+      "node_id": "abc123:201",
+      "mentions": []
+    }
+  ],
+  "changes": [
+    {
+      "id": "phx-ver-001",
+      "label": "MFA challenge frame restyle",
+      "description": "Reworked the MFA challenge layout and added inline error states.",
+      "changed_at": "2026-05-22T15:45:00Z",
+      "author": "@mara.lopez",
+      "affected_frames": ["Auth Modal — MFA Challenge"]
+    },
+    {
+      "id": "phx-ver-002",
+      "label": "Session-expired ready-for-dev",
+      "description": "Final spacing pass; marked ready for dev.",
+      "changed_at": "2026-05-26T11:00:00Z",
+      "author": "@mara.lopez",
+      "affected_frames": ["Auth Modal — Session Expired"]
+    }
+  ]
+}

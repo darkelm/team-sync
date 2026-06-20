@@ -1,0 +1,47 @@
+{
+  "file_id": "def456",
+  "file_name": "Atlas Data Dashboards",
+  "team": "Team Atlas",
+  "dev_status": [
+    {
+      "node_id": "def456:310",
+      "name": "Dashboard — Overview Grid",
+      "readiness": "ready_for_dev",
+      "last_modified": "2026-05-27T17:00:00Z",
+      "linked_tickets": ["ATL-204"],
+      "assignee": "@priya.shah",
+      "notes": "Ready for dev; uses Nova DataTable instance."
+    },
+    {
+      "node_id": "def456:311",
+      "name": "Dashboard — Filters Panel",
+      "readiness": "in_design",
+      "last_modified": "2026-05-19T12:00:00Z",
+      "linked_tickets": [],
+      "assignee": "@priya.shah",
+      "notes": "Still exploring filter interaction patterns."
+    }
+  ],
+  "comments": [
+    {
+      "id": "atl-cmt-001",
+      "author": "@priya.shah",
+      "message": "Heads up: overview grid hover doesn't match Nova's new blue-50 — needs resync before handoff.",
+      "created_at": "2026-05-28T09:00:00Z",
+      "resolved": false,
+      "priority": "high",
+      "node_id": "def456:310",
+      "mentions": ["@amara.osei"]
+    }
+  ],
+  "changes": [
+    {
+      "id": "atl-ver-001",
+      "label": "Overview grid handoff prep",
+      "description": "Annotated overview grid for dev handoff.",
+      "changed_at": "2026-05-27T17:00:00Z",
+      "author": "@priya.shah",
+      "affected_frames": ["Dashboard — Overview Grid"]
+    }
+  ]
+}

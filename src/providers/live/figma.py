@@ -17,12 +17,15 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
-from ...core.schemas import DesignStatus, DriftIssue, DriftSeverity, FigmaComponent
+from ...core.schemas import (
+    DesignStatus, DriftIssue, DriftSeverity, FigmaComponent,
+    DevReadiness, FigmaDevStatus, FigmaComment, FigmaChange, TicketPriority,
+)
 from ..base import FigmaProvider
 
 log = logging.getLogger(__name__)
@@ -68,6 +71,74 @@ def _parse_datetime(ts: Optional[str]) -> datetime:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except ValueError:
         return datetime.now(timezone.utc)
+
+
+# Figma Dev Mode `devStatus.type` -> our DevReadiness enum.
+# The REST file response annotates frames with devStatus = {"type": "READY_FOR_DEV"}
+# (or absent). Anything we don't recognise falls back to in_design.
+_DEV_STATUS_MAP = {
+    "READY_FOR_DEV": DevReadiness.ready_for_dev,
+    "COMPLETED": DevReadiness.ready_for_dev,
+    "IN_PROGRESS": DevReadiness.in_design,
+    "READY_FOR_REVIEW": DevReadiness.needs_review,
+    "NEEDS_REVIEW": DevReadiness.needs_review,
+    "BLOCKED": DevReadiness.blocked,
+}
+
+# Issue-tracker key pattern for pulling linked tickets out of dev_resource names
+# / URLs and comment bodies, e.g. "PHX-118", "NOVA-31".
+_TICKET_KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
+
+# Keywords that bump an unresolved comment to high priority. Figma comments have
+# no native priority field, so we infer it from the message text.
+_HIGH_PRIORITY_KEYWORDS = (
+    "blocker", "blocked", "urgent", "asap", "critical",
+    "regression", "broken", "p0", "p1", "must fix",
+)
+
+
+def _map_dev_readiness(dev_status: Optional[dict]) -> DevReadiness:
+    """Map a Figma node `devStatus` object to our DevReadiness enum.
+
+    Figma returns e.g. {"type": "READY_FOR_DEV"}. Unknown/absent -> in_design.
+    """
+    if not dev_status:
+        return DevReadiness.in_design
+    raw = (dev_status.get("type") or "").upper()
+    return _DEV_STATUS_MAP.get(raw, DevReadiness.in_design)
+
+
+def _infer_comment_priority(message: str) -> TicketPriority:
+    """Infer a TicketPriority from a Figma comment body (no native field exists)."""
+    text = (message or "").lower()
+    if any(kw in text for kw in _HIGH_PRIORITY_KEYWORDS):
+        return TicketPriority.high
+    return TicketPriority.medium
+
+
+def _extract_ticket_keys(*texts: str) -> list[str]:
+    """Pull distinct issue-tracker keys (e.g. PHX-118) out of arbitrary text."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for t in texts:
+        for m in _TICKET_KEY_RE.findall(t or ""):
+            if m not in seen:
+                keys.append(m)
+                seen.add(m)
+    return keys
+
+
+def _iter_frames(node: dict):
+    """Yield FRAME / SECTION / COMPONENT nodes from a Figma document tree.
+
+    Walks the canvas → children recursively. These are the node types that can
+    carry a Dev Mode status, so they're the unit of dev-handoff readiness.
+    """
+    node_type = node.get("type")
+    if node_type in ("FRAME", "SECTION", "COMPONENT", "COMPONENT_SET"):
+        yield node
+    for child in node.get("children", []) or []:
+        yield from _iter_frames(child)
 
 
 class _Cache:
@@ -568,6 +639,232 @@ class LiveFigmaProvider(FigmaProvider):
                 ))
 
         return issues
+
+    # ------------------------------------------------------------------
+    # Figma-native coordination signals
+    # ------------------------------------------------------------------
+
+    def _dev_resources_by_node(self, file_key: str) -> dict[str, list[str]]:
+        """Map {node_id: [ticket keys]} from a file's Dev Mode dev_resources.
+
+        Calls GET /v1/files/{key}/dev_resources. Each dev_resource links a node
+        to an external URL/name (often a Jira/issue link). We pull tracker keys
+        out of the resource name and url. Returns {} (logged) on failure.
+        """
+        out: dict[str, list[str]] = {}
+        try:
+            data = self._get(f"/files/{file_key}/dev_resources")
+        except Exception as exc:
+            log.debug("Could not fetch dev_resources for %s: %s", file_key, exc)
+            return out
+        for res in data.get("dev_resources", []):
+            node_id = res.get("node_id", "")
+            if not node_id:
+                continue
+            keys = _extract_ticket_keys(res.get("name", ""), res.get("url", ""))
+            if keys:
+                out.setdefault(node_id, [])
+                for k in keys:
+                    if k not in out[node_id]:
+                        out[node_id].append(k)
+        return out
+
+    def get_dev_status(self, team: Optional[str] = None) -> list[FigmaDevStatus]:
+        """Fetch per-frame dev-handoff readiness for each team's Figma file.
+
+        Calls:
+          GET /v1/files/{key}            (document tree -> frames + devStatus)
+          GET /v1/files/{key}/dev_resources   (linked tickets per node)
+
+        Frames carry a Dev Mode `devStatus` ({"type": "READY_FOR_DEV"} etc.),
+        which we map to DevReadiness. Linked tickets are joined from
+        dev_resources by node id. Returns [] (logged) on any API failure.
+        """
+        results: list[FigmaDevStatus] = []
+        team_file_map = self._team_file_map()
+
+        if not team_file_map:
+            log.warning(
+                "LiveFigmaProvider.get_dev_status: no team file map available. "
+                "Pass a ManifestProvider to the constructor."
+            )
+            return []
+
+        for team_name, file_entries in team_file_map.items():
+            if team and team.lower() not in team_name.lower():
+                continue
+            for file_key, file_name in file_entries:
+                try:
+                    data = self._get(f"/files/{file_key}")
+                except Exception as exc:
+                    log.warning(
+                        "Figma API error fetching file for dev status team=%s file=%s: %s",
+                        team_name, file_key, exc,
+                    )
+                    continue
+
+                resolved_name = data.get("name", file_name)
+                tickets_by_node = self._dev_resources_by_node(file_key)
+
+                document = data.get("document", {})
+                for canvas in document.get("children", []) or []:
+                    for frame in _iter_frames(canvas):
+                        dev_status = frame.get("devStatus")
+                        # Only surface frames that actually carry a dev status —
+                        # otherwise every frame in the file would be reported.
+                        if not dev_status:
+                            continue
+                        node_id = frame.get("id", "")
+                        try:
+                            results.append(FigmaDevStatus(
+                                node_id=node_id,
+                                name=frame.get("name", node_id),
+                                file_id=file_key,
+                                file_name=resolved_name,
+                                team=team_name,
+                                readiness=_map_dev_readiness(dev_status),
+                                last_modified=_parse_datetime(
+                                    frame.get("lastModified") or data.get("lastModified")
+                                ),
+                                linked_tickets=tickets_by_node.get(node_id, []),
+                                assignee=None,
+                                notes=(dev_status.get("description") or None),
+                            ))
+                        except Exception as exc:
+                            log.debug(
+                                "Skipping dev status for node %s in %s: %s",
+                                node_id, file_key, exc,
+                            )
+
+        return results
+
+    def get_open_comments(self, team: Optional[str] = None) -> list[FigmaComment]:
+        """Fetch unresolved comment threads for each team's Figma file.
+
+        Calls GET /v1/files/{key}/comments. Resolved comments (those with a
+        resolved_at timestamp) are filtered out. Priority is inferred from the
+        message body (Figma has no native priority). Returned highest-priority
+        first. Returns [] (logged) on any API failure.
+        """
+        results: list[FigmaComment] = []
+        team_file_map = self._team_file_map()
+
+        if not team_file_map:
+            log.warning(
+                "LiveFigmaProvider.get_open_comments: no team file map available. "
+                "Pass a ManifestProvider to the constructor."
+            )
+            return []
+
+        for team_name, file_entries in team_file_map.items():
+            if team and team.lower() not in team_name.lower():
+                continue
+            for file_key, file_name in file_entries:
+                try:
+                    data = self._get(f"/files/{file_key}/comments")
+                except Exception as exc:
+                    log.warning(
+                        "Figma API error fetching comments team=%s file=%s: %s",
+                        team_name, file_key, exc,
+                    )
+                    continue
+
+                for raw in data.get("comments", []):
+                    resolved = bool(raw.get("resolved_at"))
+                    if resolved:
+                        continue
+                    message = raw.get("message", "")
+                    user = raw.get("user", {}) or {}
+                    client_meta = raw.get("client_meta", {}) or {}
+                    node_id = client_meta.get("node_id")
+                    try:
+                        results.append(FigmaComment(
+                            id=str(raw.get("id", "")),
+                            file_id=file_key,
+                            file_name=file_name,
+                            team=team_name,
+                            author=user.get("handle", "") or user.get("id", ""),
+                            message=message,
+                            created_at=_parse_datetime(raw.get("created_at")),
+                            resolved=False,
+                            priority=_infer_comment_priority(message),
+                            node_id=node_id,
+                            mentions=[
+                                m.get("handle", "")
+                                for m in raw.get("mentions", []) or []
+                                if m.get("handle")
+                            ],
+                        ))
+                    except Exception as exc:
+                        log.debug(
+                            "Skipping comment %s in %s: %s",
+                            raw.get("id"), file_key, exc,
+                        )
+
+        priority_rank = {
+            TicketPriority.critical: 0, TicketPriority.high: 1,
+            TicketPriority.medium: 2, TicketPriority.low: 3,
+        }
+        return sorted(
+            results,
+            key=lambda c: (priority_rank.get(c.priority, 99), c.created_at),
+        )
+
+    def get_recent_changes(self, team: Optional[str] = None, days: int = 7) -> list[FigmaChange]:
+        """Fetch recent version history for each team's Figma file.
+
+        Calls GET /v1/files/{key}/versions. Returns versions whose created_at
+        falls within the last `days`, newest first. Returns [] (logged) on any
+        API failure.
+        """
+        results: list[FigmaChange] = []
+        team_file_map = self._team_file_map()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        if not team_file_map:
+            log.warning(
+                "LiveFigmaProvider.get_recent_changes: no team file map available. "
+                "Pass a ManifestProvider to the constructor."
+            )
+            return []
+
+        for team_name, file_entries in team_file_map.items():
+            if team and team.lower() not in team_name.lower():
+                continue
+            for file_key, file_name in file_entries:
+                try:
+                    data = self._get(f"/files/{file_key}/versions")
+                except Exception as exc:
+                    log.warning(
+                        "Figma API error fetching versions team=%s file=%s: %s",
+                        team_name, file_key, exc,
+                    )
+                    continue
+
+                for ver in data.get("versions", []):
+                    changed_at = _parse_datetime(ver.get("created_at"))
+                    if changed_at < cutoff:
+                        continue
+                    user = ver.get("user", {}) or {}
+                    try:
+                        results.append(FigmaChange(
+                            id=str(ver.get("id", "")),
+                            file_id=file_key,
+                            file_name=file_name,
+                            team=team_name,
+                            label=ver.get("label") or "Untitled version",
+                            description=ver.get("description", "") or "",
+                            changed_at=changed_at,
+                            author=user.get("handle", ""),
+                            affected_frames=[],
+                        ))
+                    except Exception as exc:
+                        log.debug(
+                            "Skipping version %s in %s: %s",
+                            ver.get("id"), file_key, exc,
+                        )
+
+        return sorted(results, key=lambda c: c.changed_at, reverse=True)
 
 
 # ---------------------------------------------------------------------------

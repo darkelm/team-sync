@@ -40,6 +40,19 @@ class DriftSeverity(str, Enum):
     high = "high"
     critical = "critical"
 
+class DevReadiness(str, Enum):
+    """Design→dev handoff state for a Figma frame/section.
+
+    This is the Figma-native coordination signal — whether a frame is marked
+    "ready for dev" (Figma Dev Mode `ready_for_dev` status), still in design,
+    awaiting review, or blocked. Distinct from DesignStatus (a component's own
+    lifecycle) because it answers "can engineering pick this up?" specifically.
+    """
+    ready_for_dev = "ready_for_dev"
+    in_design = "in_design"
+    needs_review = "needs_review"
+    blocked = "blocked"
+
 
 # ── Team Manifest ─────────────────────────────────────────────────────────────
 
@@ -259,6 +272,69 @@ class FigmaComponent(BaseModel):
     is_library_component: bool = False
     diverges_from_library: bool = False
     divergence_notes: Optional[str] = None
+
+
+# ── Figma-native coordination signals (design↔dev handoff) ───────────────────
+#
+# These model the signals that actually drive design↔dev coordination, beyond
+# drift: which frames are ready for dev, which open comments are blocking, what
+# changed recently, and which tickets a frame is linked to. They are ADDITIVE
+# and do not feed the drift detector.
+
+class FigmaDevStatus(BaseModel):
+    """Dev-handoff readiness for a Figma frame/section within a team's file.
+
+    Mirrors Figma Dev Mode's per-node "Ready for dev" status plus the linked
+    tickets a frame carries (Dev Mode "Links to" / branch annotations). One
+    row per frame, keyed by node_id within the file.
+    """
+    node_id: str                                       # file-scoped Figma node id ("123:456")
+    name: str                                          # frame/section name
+    file_id: str
+    file_name: str
+    team: str
+    readiness: DevReadiness
+    last_modified: datetime
+    linked_tickets: list[str] = Field(default_factory=list)  # Jira/issue keys linked to this frame
+    assignee: Optional[str] = None                     # who marked it / owns the handoff
+    notes: Optional[str] = None                        # status note / blocker reason
+
+
+class FigmaComment(BaseModel):
+    """An open comment thread on a Figma file (the Figma /comments API).
+
+    SyncBot surfaces high-priority, unresolved comments because they are the
+    realtime "this is blocking handoff" signal that drift never captures.
+    """
+    id: str                                            # Figma comment id
+    file_id: str
+    file_name: str
+    team: str
+    author: str
+    message: str
+    created_at: datetime
+    resolved: bool = False
+    priority: TicketPriority = TicketPriority.medium   # inferred from labels/keywords
+    node_id: Optional[str] = None                      # frame the comment is anchored to
+    mentions: list[str] = Field(default_factory=list)  # @-mentioned handles
+
+
+class FigmaChange(BaseModel):
+    """A recent version/frame change on a team's Figma file (the /versions API,
+    plus frame-level last_modified deltas).
+
+    Used to answer "what moved in design since the last digest?" — the temporal
+    coordination signal.
+    """
+    id: str                                            # version id or change id
+    file_id: str
+    file_name: str
+    team: str
+    label: str                                         # version label / change summary
+    description: str = ""
+    changed_at: datetime
+    author: str = ""
+    affected_frames: list[str] = Field(default_factory=list)  # frame/section names touched
 
 
 # ── Drift + Conflicts ─────────────────────────────────────────────────────────

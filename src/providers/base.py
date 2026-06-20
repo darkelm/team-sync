@@ -4,6 +4,7 @@ from typing import Optional
 from ..core.schemas import (
     TeamManifest, Ticket, ConfluencePage, PullRequest,
     FigmaComponent, DriftIssue,
+    FigmaDevStatus, FigmaComment, FigmaChange,
 )
 
 
@@ -55,6 +56,22 @@ class FigmaProvider(ABC):
 
     @abstractmethod
     def get_drift_issues(self) -> list[DriftIssue]: ...
+
+    # ── Figma-native coordination signals ────────────────────────────────────
+    @abstractmethod
+    def get_dev_status(self, team: Optional[str] = None) -> list[FigmaDevStatus]:
+        """Dev-handoff readiness (ready-for-dev status + linked tickets) per frame."""
+        ...
+
+    @abstractmethod
+    def get_open_comments(self, team: Optional[str] = None) -> list[FigmaComment]:
+        """Open (unresolved) Figma comment threads, surfacing high-priority ones."""
+        ...
+
+    @abstractmethod
+    def get_recent_changes(self, team: Optional[str] = None, days: int = 7) -> list[FigmaChange]:
+        """Recent version/frame changes on each team's Figma file within `days`."""
+        ...
 
 
 class SlackProvider(ABC):
