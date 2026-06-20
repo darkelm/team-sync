@@ -326,7 +326,9 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
         return "\n".join(lines)
 
     # Who owns X
-    if any(w in q for w in ["who owns", "who is responsible", "who do i talk to about", "owner of"]):
+    if any(w in q for w in ["who owns", "who is responsible", "who do i talk to about", "owner of",
+                            "who maintains", "who handles", "who's on the hook for",
+                            "who's responsible for", "point person for"]):
         from src.agent.fuzzy import component_owner
         words = text.split()
         component = words[-1].strip("?.,")
@@ -344,7 +346,8 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
         return f"No team owns `{component}` yet. Ask in #general, or the data owner may need to add it to a team manifest."
 
     # When does X ship
-    if any(w in q for w in ["when does", "when is", "shipping", "deliver", "deliverables"]):
+    if any(w in q for w in ["when does", "when is", "shipping", "deliver", "deliverables",
+                            "ship date", "launch date", "delivery date", "due date", "when will"]):
         matched = _match_teams(text)
         for team_name in matched:
             team = providers.manifests.get_team(team_name)
@@ -568,7 +571,8 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
         return "\n".join(lines)
 
     # Get me up to speed / onboarding
-    if any(w in q for w in ["up to speed", "onboard", "new to", "tell me about", "context on"]):
+    if any(w in q for w in ["up to speed", "onboard", "new to", "tell me about", "context on",
+                            "catch me up", "ramp up on", "fill me in on", "get me oriented", "primer on"]):
         for team in providers.manifests.get_all_teams():
             if team.team.lower() in q:
                 t = team
@@ -607,7 +611,8 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
         return "Which team's digest? Try: `@syncbot digest for Team Horizon`"
 
     # Dependency graph
-    if any(w in q for w in ["depend", "dependency", "dependencies"]):
+    if any(w in q for w in ["depend", "dependency", "dependencies",
+                            "what relies on", "upstream", "downstream", "blocked by"]):
         for team in providers.manifests.get_all_teams():
             if team.team.lower() in q:
                 t = team

@@ -62,6 +62,11 @@ GOLDEN = [
     ("dependencies for Team Phoenix",                   ["Depends on", "Atlas"]),
     ("status",                                          ["status", "Teams tracked"]),
     ("where do digests go",                             ["digest"]),
+    # synonym coverage (starter set added while AI is off)
+    ("who maintains DataTable",                         ["Team Nova"]),
+    ("ship date for Team Phoenix",                      ["PHX-"]),
+    ("catch me up on Team Horizon",                     ["Horizon"]),
+    ("what relies on Team Phoenix",                     ["Depends on"]),
 ]
 
 
