@@ -39,9 +39,10 @@ import os
 import re
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from src.agent.detector import BREAKING_CHANGE_LABEL, is_floor_violation
 from src.agent.events import Event, EventRouter, TRIGGER_CATALOG
 from src.providers.factory import Providers
 
@@ -192,6 +193,60 @@ def _derive_components_from_github(
     files_changed = providers.github.get_pr_files(owner, repo, number)
     components_touched = _components_for_files(files_changed, providers)
     return files_changed, components_touched
+
+
+# Match a ticket key like PHX-102 / ATL-201 in a PR title or branch name, so the
+# floor check can search Confluence by the same key the decision log references.
+_TICKET_KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
+
+
+def _pr_labels(pr: dict) -> list[str]:
+    """Labels on a GitHub PR payload: a list of ``{"name": ...}`` objects (or bare
+    strings, defensively). Lower-cased names — the breaking-change label is the
+    only one the floor cares about and we compare case-insensitively."""
+    out: list[str] = []
+    for label in pr.get("labels", []) or []:
+        name = label.get("name", "") if isinstance(label, dict) else str(label)
+        if name:
+            out.append(name.lower())
+    return out
+
+
+def _pr_search_keys(pr: dict) -> list[str]:
+    """Keys to search Confluence by when checking for a decision log: any ticket
+    keys referenced in the PR title or head branch, plus the PR title itself. A
+    decision log keyed on a linked ticket id (the detector's convention) or one
+    that names the change in its summary will be found via these."""
+    keys: list[str] = []
+    haystack = f"{pr.get('title', '')} {pr.get('head_branch', '')} {pr.get('head', {}).get('ref', '') if isinstance(pr.get('head'), dict) else ''}"
+    keys.extend(_TICKET_KEY_RE.findall(haystack.upper()))
+    title = pr.get("title", "")
+    if title:
+        keys.append(title)
+    # De-dupe, order-preserving.
+    seen: set[str] = set()
+    return [k for k in keys if not (k in seen or seen.add(k))]
+
+
+def _pr_is_unlogged_breaking_change(pr: dict, providers: Providers) -> bool:
+    """The membrane FLOOR signal for a merged PR (p1): a breaking change with no
+    decision log. Delegates to the detector's :func:`is_floor_violation` so the
+    webhook and the drift detector apply the identical rule (DRY).
+
+    A breaking change clears the floor only if NONE of the PR's search keys turn
+    up a decision-log page — a single logged decision (linked by any key) is
+    enough to satisfy the floor. Pure given the provider (Confluence reads only).
+    """
+    labels = _pr_labels(pr)
+    if BREAKING_CHANGE_LABEL not in labels:
+        return False
+    keys = _pr_search_keys(pr)
+    if not keys:
+        # Breaking change with no key to look a decision log up by — treat as
+        # unlogged (conservative: the floor errs toward blocking, not shipping).
+        return True
+    # Floor is violated only when every candidate key comes back with no log.
+    return all(is_floor_violation(labels, key, providers.confluence) for key in keys)
 
 
 def _figma_file_to_team(file_id: str, file_name: str, providers: Providers) -> str:
@@ -375,6 +430,22 @@ async def webhook_github(
         )
         resolution = "review"
 
+    # ── Governance floor (p1) ─────────────────────────────────────────────────
+    # Set the membrane's hard-floor signal when this merge is an UNLOGGED BREAKING
+    # CHANGE (breaking-change label + no decision log in Confluence). route_lane
+    # reads metadata["p1"]; a truthy value routes the event to the `blocked` lane,
+    # checked ahead of everything ("cannot ship without a logged decision").
+    # Degrade safely: if the Confluence lookup fails we default p1 to False (never
+    # fail the webhook) but log it — we don't swallow the error silently.
+    p1 = False
+    try:
+        p1 = _pr_is_unlogged_breaking_change(pr, providers)
+    except Exception as e:
+        log.warning(
+            "github code.merged: floor (p1) check failed, defaulting p1=False repo=%s pr=%s: %s",
+            repo_name, pr.get("number"), e,
+        )
+
     router = EventRouter(providers)
 
     def _base_metadata(extra: dict) -> dict:
@@ -386,6 +457,7 @@ async def webhook_github(
             "files_changed": files_changed,
             "components_touched": components_touched,
             "resolution": resolution,
+            "p1": p1,
         }
         md.update(extra)
         return md
@@ -418,13 +490,14 @@ async def webhook_github(
         total += router.dispatch(event)
 
     log.info(
-        "github code.merged dispatched=%d repo=%s resolution=%s components=%s",
-        total, repo_name, resolution, components_touched,
+        "github code.merged dispatched=%d repo=%s resolution=%s components=%s floor=%s",
+        total, repo_name, resolution, components_touched, p1,
     )
     return JSONResponse({
         "dispatched": total,
         "resolution": resolution,
         "components_touched": components_touched,
+        "floor": p1,
     })
 
 

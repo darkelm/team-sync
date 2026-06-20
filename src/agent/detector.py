@@ -2,8 +2,44 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from ..core.schemas import DriftIssue, ConflictPrediction, DriftSeverity
+from ..providers.base import ConfluenceProvider
 from ..providers.factory import Providers
 from .freshness import is_fresh
+
+
+# ── Governance floor: the unlogged-breaking-change rule ───────────────────────
+#
+# The label that marks a change as breaking. A change carrying this label MUST
+# have a logged decision before it ships — that is the membrane's hard floor (the
+# `blocked` lane). Single source of truth so the detector AND the webhook agree.
+BREAKING_CHANGE_LABEL = "breaking-change"
+
+
+def is_floor_violation(
+    labels: list[str],
+    search_key: str,
+    confluence: ConfluenceProvider,
+) -> bool:
+    """True when a change is a FLOOR violation: a breaking change with no decision log.
+
+    This is the membrane's hard floor (contract: cannot ship without a logged
+    decision / human sign-off). A change violates the floor when BOTH hold:
+
+      1. it carries the ``breaking-change`` label, AND
+      2. no decision-log page in Confluence references it — i.e. searching
+         Confluence for ``search_key`` (a ticket id, PR key, …) turns up no
+         page with a populated ``.decision_log``.
+
+    Pure given the provider: it only reads (``confluence.search_pages``). This is
+    the exact rule :meth:`DriftDetector._detect_missing_decision_logs` already
+    encodes for tickets — extracted here so the webhook can reuse it verbatim to
+    populate the membrane's ``p1`` floor signal on live merge events.
+    """
+    if BREAKING_CHANGE_LABEL not in labels:
+        return False
+    pages = confluence.search_pages(search_key)
+    decision_pages = [p for p in pages if p.decision_log]
+    return not decision_pages
 
 
 # ── Notification discipline (alert gating) ────────────────────────────────────
@@ -215,23 +251,21 @@ class DriftDetector:
                     suggested_action="Create a decision log in Confluence documenting why this cross-team change was made.",
                 ))
 
-        # Flag tickets with breaking-change label and no linked decision log
+        # Flag tickets with breaking-change label and no linked decision log.
+        # Same rule the membrane floor uses — see is_floor_violation (DRY).
         for ticket in self.p.jira.get_tickets():
-            if "breaking-change" in ticket.labels:
-                pages = self.p.confluence.search_pages(ticket.id)
-                decision_pages_for_ticket = [p for p in pages if p.decision_log]
-                if not decision_pages_for_ticket:
-                    issues.append(DriftIssue(
-                        id=f"no-decision-ticket-{ticket.id}",
-                        type="missing_decision_log",
-                        severity=DriftSeverity.high,
-                        title=f"Breaking change without decision log: {ticket.id}",
-                        description=f"'{ticket.title}' is marked as a breaking change but has no formal decision log in Confluence.",
-                        teams_involved=[ticket.team],
-                        components_involved=ticket.components,
-                        detected_at=datetime.now(timezone.utc),
-                        suggested_action="Write a decision log in Confluence before this ships.",
-                    ))
+            if is_floor_violation(ticket.labels, ticket.id, self.p.confluence):
+                issues.append(DriftIssue(
+                    id=f"no-decision-ticket-{ticket.id}",
+                    type="missing_decision_log",
+                    severity=DriftSeverity.high,
+                    title=f"Breaking change without decision log: {ticket.id}",
+                    description=f"'{ticket.title}' is marked as a breaking change but has no formal decision log in Confluence.",
+                    teams_involved=[ticket.team],
+                    components_involved=ticket.components,
+                    detected_at=datetime.now(timezone.utc),
+                    suggested_action="Write a decision log in Confluence before this ships.",
+                ))
         return issues
 
     def _detect_cross_team_pr_impact(self) -> list[DriftIssue]:
