@@ -54,9 +54,14 @@ class DigestScheduler:
         for project in projects:
             try:
                 providers = project.providers()
-                res = DigestGenerator(providers).post_all_digests()
+                # apply_alert_gate=True (the default) enforces notification
+                # discipline: a proactive alert fires only when it's cross-team,
+                # high-confidence, actionable, and built on fresh manifest data —
+                # and per-alert dedup keeps the same item from repeating run-over-run.
+                res = DigestGenerator(providers, apply_alert_gate=True).post_all_digests()
                 print(f"[scheduler] {project.name}: {len(res['sent'])} sent, "
-                      f"{len(res['failed'])} failed, {len(res['paused'])} paused.", flush=True)
+                      f"{len(res['failed'])} failed, {len(res['paused'])} paused, "
+                      f"{len(res['unchanged'])} unchanged (gated).", flush=True)
                 self._run_exec_digest(project, providers)
             except Exception as e:
                 print(f"[scheduler] {project.name}: digest run failed: {e}", flush=True)

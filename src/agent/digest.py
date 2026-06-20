@@ -3,15 +3,97 @@ from datetime import date, timedelta
 from typing import Optional
 from ..core.schemas import TeamDigest
 from ..providers.factory import Providers
-from .detector import DriftDetector
+from .detector import DriftDetector, evaluate_alert_gate
 
 
 class DigestGenerator:
-    def __init__(self, providers: Providers):
+    def __init__(self, providers: Providers, *, apply_alert_gate: bool = True):
         self.p = providers
         self.detector = DriftDetector(providers)
         from .preferences import NotificationPreferences
         self.prefs = NotificationPreferences()
+        # When True, proactive alert items (open conflicts, predictions, action
+        # items) are filtered through the four-condition notification gate. The
+        # raw scan in DriftDetector.run_all() is untouched — gating happens only
+        # at this selection layer. Disable for an unfiltered "everything" view.
+        self.apply_alert_gate = apply_alert_gate
+
+    def _passes_alert_gate(self, issue, team_name: str) -> bool:
+        """Whether a single issue/prediction should fire as a proactive alert for `team_name`.
+
+        Four conditions, all required: cross-team, high-confidence (>= team
+        threshold), actionable, and fresh (every involved team's manifest is not
+        stale). Severity is also already checked by callers via prefs.severity_ok;
+        re-checking here keeps the gate self-contained and correct in isolation.
+        """
+        if not self.apply_alert_gate:
+            return True
+        return evaluate_alert_gate(issue, self.p, self.prefs, team_name).passed
+
+    def _gate_reason(self, issue, team_name: str) -> str:
+        """The 'why you got this' line for an issue that passed the gate."""
+        return evaluate_alert_gate(issue, self.p, self.prefs, team_name).explanation
+
+    # ── per-alert de-duplication ──────────────────────────────────────────────
+    #
+    # The whole-digest quality gate (NotificationPreferences.last_signature) skips
+    # a digest that's byte-identical to the last one. That's coarse: one new alert
+    # re-sends every old alert with it. This extends the same idea to the alert
+    # level — each fired alert gets a stable signature, and an alert whose
+    # signature was sent on the *previous* run is dropped from this run so the
+    # same nag doesn't repeat run-over-run. State lives in a small sidecar JSON so
+    # it survives the per-run, fresh-DigestGenerator lifecycle the scheduler uses.
+
+    ALERT_DEDUP_PATH = "data/alert_dedup.json"
+
+    @staticmethod
+    def _alert_signature(team_name: str, item) -> str:
+        import hashlib
+        ident = getattr(item, "id", "") or getattr(item, "title", "")
+        return hashlib.sha256(f"{team_name}|{ident}".encode()).hexdigest()[:16]
+
+    def _load_dedup(self) -> dict:
+        import json
+        import os
+        if not os.path.exists(self.ALERT_DEDUP_PATH):
+            return {}
+        try:
+            with open(self.ALERT_DEDUP_PATH) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def _save_dedup(self, data: dict) -> None:
+        import json
+        import os
+        os.makedirs(os.path.dirname(self.ALERT_DEDUP_PATH) or ".", exist_ok=True)
+        with open(self.ALERT_DEDUP_PATH, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def _dedup_digest(self, digest: TeamDigest, seen: dict) -> tuple[TeamDigest, set]:
+        """Drop alerts already sent on the previous run; return (filtered, this-run sigs).
+
+        `seen[team]` is the list of alert signatures sent on the previous run.
+        Returns the digest with repeated alerts removed plus the full set of
+        signatures fired *this* run (to persist for the next comparison).
+        """
+        prev = set(seen.get(digest.team, []))
+        kept_conflicts, kept_predictions, fired = [], [], set()
+        for issue in digest.open_conflicts:
+            sig = self._alert_signature(digest.team, issue)
+            fired.add(sig)
+            if sig not in prev:
+                kept_conflicts.append(issue)
+        for conflict in digest.predicted_conflicts:
+            sig = self._alert_signature(digest.team, conflict)
+            fired.add(sig)
+            if sig not in prev:
+                kept_predictions.append(conflict)
+        deduped = digest.model_copy(update={
+            "open_conflicts": kept_conflicts,
+            "predicted_conflicts": kept_predictions,
+        })
+        return deduped, fired
 
     def _design_system_team(self) -> Optional[str]:
         """Detect which team owns the design system library — no hardcoded names.
@@ -37,11 +119,18 @@ class DigestGenerator:
         week_of = date.today()
         recent_prs = self.p.github.get_recent_prs(days=7)
         all_issues = self.detector.run_all()
+        # Severity-filtered slice for the summary sections (design updates, etc.).
         team_issues = [i for i in all_issues if team_name in i.teams_involved
                        and self.prefs.severity_ok(team_name, i.severity.value)]
         predictions = [c for c in self.detector.predict_conflicts()
                        if team_name in c.teams_involved
                        and self.prefs.severity_ok(team_name, c.severity.value)]
+
+        # Notification discipline: only items clearing the four-condition gate
+        # (cross-team + high-confidence + actionable + fresh) become proactive
+        # alerts. This is the selection layer; run_all() above is unchanged.
+        alert_issues = [i for i in team_issues if self._passes_alert_gate(i, team_name)]
+        alert_predictions = [c for c in predictions if self._passes_alert_gate(c, team_name)]
 
         show_dev = prefs["sections"].get("dev", True)
         show_design = prefs["sections"].get("design", True)
@@ -67,11 +156,15 @@ class DigestGenerator:
             if dep_pr.cross_team_impact and team_name in dep_pr.cross_team_impact:
                 dep_changes.append(f"⚠ {dep_pr.team} merged changes that affect your team: {dep_pr.title}")
 
+        # Action items are proactive nudges, so they ride the gate too — and we
+        # cheaply stamp the "why you got this" reasoning onto each one.
         action_items = []
-        for issue in team_issues:
-            action_items.append(f"[{issue.severity.value.upper()}] {issue.suggested_action}")
-        for conflict in predictions:
-            action_items.append(f"[PREDICTED] {conflict.suggested_action}")
+        for issue in alert_issues:
+            why = self._gate_reason(issue, team_name)
+            action_items.append(f"[{issue.severity.value.upper()}] {issue.suggested_action} _(why: {why})_")
+        for conflict in alert_predictions:
+            why = self._gate_reason(conflict, team_name)
+            action_items.append(f"[PREDICTED] {conflict.suggested_action} _(why: {why})_")
 
         # Manifest freshness — surface stale ownership/dep data so the digest
         # isn't quietly authoritative on rotted manifests.
@@ -90,8 +183,8 @@ class DigestGenerator:
             dev_updates=dev_updates,
             design_updates=design_updates,
             dependency_changes=dep_changes,
-            open_conflicts=team_issues,
-            predicted_conflicts=predictions,
+            open_conflicts=alert_issues,
+            predicted_conflicts=alert_predictions,
             action_items=action_items,
             staleness=staleness,
         )
@@ -164,6 +257,9 @@ class DigestGenerator:
         sent (and its signature recorded) if delivery actually succeeded.
         """
         results = {"sent": [], "failed": [], "paused": [], "unchanged": []}
+        # Per-alert dedup state from the previous run (skipped under force, which
+        # is the on-demand "give me everything now" path).
+        dedup = {} if force else self._load_dedup()
         for team in self.p.manifests.get_all_teams():
             name = team.team
             if self.prefs.is_paused(name):
@@ -171,6 +267,10 @@ class DigestGenerator:
                 results["paused"].append(name)
                 continue
             digest = self.generate_for_team(name)
+            # Drop alerts already sent last run so the same nag doesn't repeat.
+            fired = None
+            if not force:
+                digest, fired = self._dedup_digest(digest, dedup)
             sig = self._signature(digest)
             if not force and not self.prefs.changed_since_last(name, sig):
                 print(f"[digest] {name} — nothing new since last digest, skipping.", flush=True)
@@ -183,8 +283,12 @@ class DigestGenerator:
             ok = self.p.slack.post_digest(target, self.format_slack_message(digest))
             if ok:
                 self.prefs.record_signature(name, sig)
+                if fired is not None:
+                    dedup[name] = sorted(fired)
                 results["sent"].append((name, display))
             else:
                 print(f"[digest] {name} — delivery to {display} FAILED.", flush=True)
                 results["failed"].append((name, display))
+        if not force:
+            self._save_dedup(dedup)
         return results

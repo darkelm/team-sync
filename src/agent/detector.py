@@ -1,7 +1,119 @@
 """Drift and conflict detection — runs across all providers to find issues."""
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from ..core.schemas import DriftIssue, ConflictPrediction, DriftSeverity
 from ..providers.factory import Providers
+from .freshness import is_fresh
+
+
+# ── Notification discipline (alert gating) ────────────────────────────────────
+#
+# run_all()/predict_conflicts() are the RAW scan — they return everything found,
+# and the golden detector tests assert exact counts on that raw output. The gate
+# below is applied LATER, at the notification/digest selection layer, so a noisy
+# raw scan still becomes a disciplined alert stream. An item only earns a
+# proactive alert when ALL FOUR conditions hold:
+#
+#   1. cross-team      — involves >= 2 teams (single-team churn isn't coordination)
+#   2. high-confidence — severity at/above the team's threshold (prefs.severity_ok)
+#   3. actionable      — has a non-empty suggested_action (there's something to do)
+#   4. fresh           — every involved team's manifest is reasonably fresh
+#                        (freshness.is_fresh); never alert off rotted ownership data
+#
+# Keep it additive and configurable: callers can relax individual conditions
+# (e.g. require_cross_team=False) without touching the raw scan.
+
+
+@dataclass
+class AlertGateResult:
+    """The verdict for one issue plus the per-condition reasoning ('why you got this')."""
+    passed: bool
+    reasons: dict          # condition -> bool (cross_team, high_confidence, actionable, fresh)
+    explanation: str       # short human line, cheap to surface in a digest/log
+
+    def __bool__(self) -> bool:
+        return self.passed
+
+
+def evaluate_alert_gate(
+    issue,
+    providers: Providers,
+    prefs,
+    team_name: str | None = None,
+    *,
+    require_cross_team: bool = True,
+    require_high_confidence: bool = True,
+    require_actionable: bool = True,
+    require_fresh: bool = True,
+) -> AlertGateResult:
+    """Decide whether `issue` deserves a proactive alert, and explain why.
+
+    Works for both DriftIssue and ConflictPrediction (both expose
+    `teams_involved`, `severity`, and `suggested_action`).
+
+    `team_name` scopes the severity check to one team's threshold. When omitted,
+    severity passes if it clears the threshold for ANY involved team (the most
+    permissive interpretation — a critical-to-someone alert still fires).
+    """
+    teams = list(getattr(issue, "teams_involved", []) or [])
+    severity = getattr(getattr(issue, "severity", None), "value", None)
+    action = (getattr(issue, "suggested_action", "") or "").strip()
+
+    # 1. cross-team — >= 2 distinct teams.
+    cross_team = len({t for t in teams if t}) >= 2
+
+    # 2. high-confidence — severity clears the team's configured threshold.
+    if team_name is not None:
+        high_confidence = bool(severity) and prefs.severity_ok(team_name, severity)
+    else:
+        high_confidence = bool(severity) and any(
+            prefs.severity_ok(t, severity) for t in teams
+        ) if teams else False
+
+    # 3. actionable — there is a concrete suggested action.
+    actionable = bool(action)
+
+    # 4. fresh — every involved team's manifest is reasonably fresh. An alert that
+    #    spans a stale team is suppressed: we won't push coordination off rotted data.
+    fresh = True
+    if teams:
+        for t in teams:
+            team_obj = providers.manifests.get_team(t)
+            if team_obj is None or not is_fresh(team_obj):
+                fresh = False
+                break
+    else:
+        fresh = False  # an alert involving no team can't be freshness-verified
+
+    reasons = {
+        "cross_team": cross_team,
+        "high_confidence": high_confidence,
+        "actionable": actionable,
+        "fresh": fresh,
+    }
+
+    # A condition only blocks if it's required. This keeps the gate configurable.
+    checks = {
+        "cross_team": (cross_team, require_cross_team),
+        "high_confidence": (high_confidence, require_high_confidence),
+        "actionable": (actionable, require_actionable),
+        "fresh": (fresh, require_fresh),
+    }
+    failed = [name for name, (ok, required) in checks.items() if required and not ok]
+    passed = not failed
+
+    if passed:
+        explanation = "cross-team + high-confidence + actionable + fresh"
+    else:
+        labels = {
+            "cross_team": "single-team",
+            "high_confidence": "below severity threshold",
+            "actionable": "no suggested action",
+            "fresh": "stale/unverified manifest",
+        }
+        explanation = "suppressed: " + ", ".join(labels[n] for n in failed)
+
+    return AlertGateResult(passed=passed, reasons=reasons, explanation=explanation)
 
 
 class DriftDetector:
