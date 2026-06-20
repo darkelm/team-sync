@@ -25,6 +25,7 @@ load_dotenv()
 from mcp.server.fastmcp import FastMCP
 from src.providers.factory import Providers
 from src.agent.tools import execute_tool
+from src.log import configure_logging
 
 mcp = FastMCP("team-sync")
 # Project-selectable: one MCP server instance serves one project/engagement.
@@ -165,4 +166,5 @@ def emit_event(event_type: str, subject: str = "", team: str = "") -> str:
 
 
 if __name__ == "__main__":
+    configure_logging()  # console handler -> stderr, safe for stdio MCP
     mcp.run()

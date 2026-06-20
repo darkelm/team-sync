@@ -34,6 +34,9 @@ from bootstrap import (
     _project_engines,
 )
 from src.agent.scheduler import DigestScheduler
+from src.log import configure_logging, get_logger
+
+log = get_logger("syncbot")
 
 # Keyword router (the no-LLM brain). handle_query and _match_teams are used by
 # the handlers below; re-exported so `slack_bot.handle_query` still resolves.
@@ -85,7 +88,7 @@ def answer(text: str, role: str = "ic", project_config: str = "config.yaml",
             hint = agent_hint(role)
             reply = agent.ask(f"{hint}\n\n{text}" if hint else text)
         except Exception as e:
-            print(f"[agent] error, falling back to keywords: {e}", flush=True)
+            log.warning("agent error, falling back to keywords: %s", e)
     if not reply:
         reply = handle_query(text, eng, role)
     if is_non_technical(role) and AGENT is None:
@@ -390,15 +393,17 @@ def handle_join(event, say):
 
 
 if __name__ == "__main__":
-    print("SyncBot starting (Socket Mode)...")
+    configure_logging()  # rotating file (data/syncbot.log) + console — the pilot audit trail
     mode = "Claude agent (natural language)" if AGENT else "keyword matching"
-    print(f"Providers: Jira={os.getenv('JIRA_PROVIDER','local')} | Confluence={os.getenv('CONFLUENCE_PROVIDER','local')} | Slack=live")
-    print(f"Understanding: {mode}")
+    log.info("SyncBot starting (Socket Mode)...")
+    log.info("Providers: Jira=%s | Confluence=%s | Slack=live",
+             os.getenv('JIRA_PROVIDER', 'local'), os.getenv('CONFLUENCE_PROVIDER', 'local'))
+    log.info("Understanding: %s", mode)
     try:
         BOT_USER_ID = app.client.auth_test()["user_id"]
     except Exception as e:
-        print(f"[startup] auth_test failed — bot can't identify itself, "
-              f"self-intro on channel join disabled: {e}", flush=True)
+        log.warning("auth_test failed — bot can't identify itself, "
+                    "self-intro on channel join disabled: %s", e)
 
     # Start the proactive weekly-digest scheduler in the background.
     # Registry-aware: runs digests for every registered project + the default.

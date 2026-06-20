@@ -10,6 +10,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .digest import DigestGenerator
+from ..log import get_logger
+
+log = get_logger(__name__)
 
 
 def _parse_cron(expr: str) -> CronTrigger:
@@ -50,7 +53,7 @@ class DigestScheduler:
 
     def _run_digests(self):
         projects = self._projects()
-        print(f"[scheduler] Running weekly digests for {len(projects)} project(s)...", flush=True)
+        log.info("Running weekly digests for %d project(s)...", len(projects))
         for project in projects:
             try:
                 providers = project.providers()
@@ -59,13 +62,13 @@ class DigestScheduler:
                 # high-confidence, actionable, and built on fresh manifest data —
                 # and per-alert dedup keeps the same item from repeating run-over-run.
                 res = DigestGenerator(providers, apply_alert_gate=True).post_all_digests()
-                print(f"[scheduler] {project.name}: {len(res['sent'])} sent, "
-                      f"{len(res['failed'])} failed, {len(res['paused'])} paused, "
-                      f"{len(res['unchanged'])} unchanged (gated).", flush=True)
+                log.info("%s: %d sent, %d failed, %d paused, %d unchanged (gated).",
+                         project.name, len(res['sent']), len(res['failed']),
+                         len(res['paused']), len(res['unchanged']))
                 self._run_exec_digest(project, providers)
             except Exception as e:
-                print(f"[scheduler] {project.name}: digest run failed: {e}", flush=True)
-        print("[scheduler] Done.", flush=True)
+                log.warning("%s: digest run failed: %s", project.name, e)
+        log.info("Weekly digest run complete.")
 
     def _run_exec_digest(self, project, providers):
         """Post the leadership portfolio rollup to the project's exec channel, if set."""
@@ -76,7 +79,7 @@ class DigestScheduler:
         from .health import HealthAssessor
         text = HealthAssessor(providers, project.config).format_portfolio()
         providers.slack.post_digest(exec_channel, text)
-        print(f"[scheduler] {project.name}: exec rollup -> {exec_channel}", flush=True)
+        log.info("%s: exec rollup -> %s", project.name, exec_channel)
 
     def start(self):
         cron_expr = self.config.get("digest", {}).get("schedule", "0 9 * * 1")
@@ -84,8 +87,8 @@ class DigestScheduler:
         self.scheduler.add_job(self._run_digests, trigger, id="weekly_digest", replace_existing=True)
         self.scheduler.start()
         tz = self.config.get("digest", {}).get("timezone", "UTC")
-        print(f"[scheduler] Weekly digest scheduled: '{cron_expr}' ({tz}) "
-              f"across {len(self._projects())} project(s).", flush=True)
+        log.info("Weekly digest scheduled: '%s' (%s) across %d project(s).",
+                 cron_expr, tz, len(self._projects()))
 
     def shutdown(self):
         self.scheduler.shutdown(wait=False)

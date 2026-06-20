@@ -3,7 +3,10 @@ import httpx
 from typing import Optional
 from ...core.schemas import Ticket, TicketStatus, TicketPriority
 from ..base import JiraProvider
+from ...log import get_logger
 from datetime import datetime
+
+log = get_logger(__name__)
 
 
 class LiveJiraProvider(JiraProvider):
@@ -20,7 +23,7 @@ class LiveJiraProvider(JiraProvider):
         except httpx.HTTPStatusError:
             # Surface live-API failures (401 bad token, 403 restricted, 429 rate limit)
             # so they don't silently read as "no data" upstream.
-            print(f"[jira] GET {path} -> HTTP {r.status_code}: {r.text[:200]}", flush=True)
+            log.warning("GET %s -> HTTP %s: %s", path, r.status_code, r.text[:200])
             raise
         return r.json()
 

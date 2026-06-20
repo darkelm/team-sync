@@ -50,7 +50,11 @@ from src.providers.factory import Providers
 # ---------------------------------------------------------------------------
 
 log = logging.getLogger("webhook_server")
-logging.basicConfig(level=logging.INFO)
+from src.log import configure_logging
+if os.getenv("SYNCBOT_TEST"):
+    logging.basicConfig(level=logging.INFO)   # tests: console only, no log file
+else:
+    configure_logging()                        # server: rotating file + console
 
 app = FastAPI(title="SyncBot Webhook Receiver", version="1.0.0")
 

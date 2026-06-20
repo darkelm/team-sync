@@ -14,3 +14,4 @@ data/audience_prefs.json
 data/unmatched_queries.jsonl
 data/stale_flags.json
 data/alert_dedup.json
+data/syncbot.log*

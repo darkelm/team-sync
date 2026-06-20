@@ -25,6 +25,9 @@ from src.agent.briefing import BriefingGenerator
 from src.agent.discovery import CollaboratorDiscovery, ReuseRadar
 from src.agent.alignment import AlignmentChecker
 from src.agent.findability import FindabilityLocator
+from src.log import get_logger
+
+log = get_logger(__name__)
 
 # ── Multi-project registry ────────────────────────────────────────────────────
 # Every query is scoped to a project. Google channels → Google data only.
@@ -131,7 +134,7 @@ if os.environ.get("ANTHROPIC_API_KEY"):
         from src.agent.syncbot import SyncBot
         AGENT = SyncBot("config.yaml")
     except Exception as e:
-        print(f"[agent] Claude agent unavailable, using keyword mode: {e}", flush=True)
+        log.warning("Claude agent unavailable, using keyword mode: %s", e)
 
 
 from src.agent.audience import AudienceStore, agent_hint, is_non_technical, parse_role_command

@@ -4,6 +4,9 @@ from typing import Optional
 from ..core.schemas import TeamDigest
 from ..providers.factory import Providers
 from .detector import DriftDetector, evaluate_alert_gate
+from ..log import get_logger
+
+log = get_logger(__name__)
 
 
 class DigestGenerator:
@@ -263,7 +266,7 @@ class DigestGenerator:
         for team in self.p.manifests.get_all_teams():
             name = team.team
             if self.prefs.is_paused(name):
-                print(f"[digest] {name} is paused — skipping.", flush=True)
+                log.info("%s is paused — skipping.", name)
                 results["paused"].append(name)
                 continue
             digest = self.generate_for_team(name)
@@ -273,7 +276,7 @@ class DigestGenerator:
                 digest, fired = self._dedup_digest(digest, dedup)
             sig = self._signature(digest)
             if not force and not self.prefs.changed_since_last(name, sig):
-                print(f"[digest] {name} — nothing new since last digest, skipping.", flush=True)
+                log.info("%s — nothing new since last digest, skipping.", name)
                 results["unchanged"].append(name)
                 continue
             # A Slack-registered channel ("send <team> digest here") overrides the
@@ -287,7 +290,7 @@ class DigestGenerator:
                     dedup[name] = sorted(fired)
                 results["sent"].append((name, display))
             else:
-                print(f"[digest] {name} — delivery to {display} FAILED.", flush=True)
+                log.warning("%s — delivery to %s FAILED.", name, display)
                 results["failed"].append((name, display))
         if not force:
             self._save_dedup(dedup)

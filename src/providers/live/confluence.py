@@ -4,6 +4,9 @@ from typing import Optional
 from datetime import date
 from ...core.schemas import ConfluencePage
 from ..base import ConfluenceProvider
+from ...log import get_logger
+
+log = get_logger(__name__)
 
 
 class LiveConfluenceProvider(ConfluenceProvider):
@@ -19,7 +22,7 @@ class LiveConfluenceProvider(ConfluenceProvider):
             r.raise_for_status()
         except httpx.HTTPStatusError:
             # Surface live-API failures so they don't silently read as "no data" upstream.
-            print(f"[confluence] GET {path} -> HTTP {r.status_code}: {r.text[:200]}", flush=True)
+            log.warning("GET %s -> HTTP %s: %s", path, r.status_code, r.text[:200])
             raise
         return r.json()
 

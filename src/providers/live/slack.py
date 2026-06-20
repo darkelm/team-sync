@@ -3,6 +3,9 @@ from typing import Optional
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from ..base import SlackProvider
+from ...log import get_logger
+
+log = get_logger(__name__)
 
 
 class LiveSlackProvider(SlackProvider):
@@ -15,7 +18,7 @@ class LiveSlackProvider(SlackProvider):
             return True
         except SlackApiError as e:
             reason = e.response.get("error", str(e)) if getattr(e, "response", None) else str(e)
-            print(f"[slack] post to {channel} failed: {reason}", flush=True)
+            log.warning("post to %s failed: %s", channel, reason)
             return False
 
     def post_digest(self, channel: str, digest_text: str) -> bool:
