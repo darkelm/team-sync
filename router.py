@@ -12,6 +12,9 @@ NOT import slack_bot.py, so there is no import cycle.
 """
 import os
 import re
+import json
+from collections import Counter
+from datetime import datetime, timezone
 
 from bootstrap import (
     AGENT,
@@ -20,6 +23,50 @@ from bootstrap import (
     providers,
 )
 from src.agent.events import Event
+
+# Queries that fall through to the keyword fallback are appended here, so the
+# team's misses become a backlog of phrasings/capabilities worth adding.
+UNMATCHED_LOG = "data/unmatched_queries.jsonl"
+
+
+def _log_unmatched(text: str, project: str = "default") -> None:
+    """Record a query the keyword router couldn't answer (best-effort)."""
+    try:
+        os.makedirs(os.path.dirname(UNMATCHED_LOG) or ".", exist_ok=True)
+        with open(UNMATCHED_LOG, "a") as f:
+            f.write(json.dumps({
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "text": text.strip(),
+                "project": project,
+            }) + "\n")
+    except OSError as e:
+        print(f"[router] couldn't log unmatched query: {e}", flush=True)
+
+
+def _format_unmatched(limit: int = 12) -> str:
+    """Rank logged unmatched queries by frequency — the add-a-command backlog."""
+    if not os.path.exists(UNMATCHED_LOG):
+        return ("No unmatched questions logged yet. 🎉 "
+                "When I can't answer something, it lands here as a backlog.")
+    entries = []
+    try:
+        with open(UNMATCHED_LOG) as f:
+            for line in f:
+                try:
+                    entries.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError as e:
+        return f"Couldn't read the unmatched-query log: {e}"
+    texts = [e["text"] for e in entries if e.get("text")]
+    if not texts:
+        return "No unmatched questions logged yet. 🎉"
+    counts = Counter(t.lower() for t in texts)
+    lines = [f"*📋 Top unmatched questions* — {len(texts)} total, your add-a-command backlog:\n"]
+    for text, n in counts.most_common(limit):
+        lines.append(f"• {f'*{n}×* ' if n > 1 else ''}“{text}”")
+    lines.append("\n_Add a trigger in `router.py` (or turn on the AI key) to handle the common ones._")
+    return "\n".join(lines)
 
 
 def _match_teams(text: str) -> list[str]:
@@ -528,6 +575,12 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
                 lines.extend(dependents if dependents else ["• none"])
                 return "\n".join(lines)
 
+    # Backlog: what the team asked that I couldn't answer.
+    if any(p in q for p in ["unmatched", "missed question", "what did people ask",
+                            "what couldn't you answer", "what could you not answer",
+                            "what did i miss"]):
+        return _format_unmatched()
+
     # Help / fallback — honest about keyword mode + which mode you're in,
     # and lead with the commands most relevant to the reader's role.
     explicit_help = any(w in q for w in ["help", "what can you do", "what can i ask", "commands", "menu"])
@@ -537,5 +590,8 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
         head = f"*SyncBot commands*  ·  mode: {mode}\n"
         head += f"{highlight}\n\n_Full list:_\n" if highlight else "\n"
         return head + HELP_BODY
+    # Genuinely unmatched — log it for the backlog, then be honest.
+    proj = eng.get("project")
+    _log_unmatched(text, proj.name if proj else "default")
     return (f"I didn't catch that. I'm in *{mode}* mode, so I match specific phrasings — "
             f"here's what I understand:\n\n" + HELP_BODY)

@@ -38,3 +38,11 @@ target-version = "py311"
 #   E701/E702 — compact one-line guards in the keyword handlers
 # Everything else (unused imports/vars, ambiguous names, etc.) is enforced.
 ignore = ["E402", "E701", "E702"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+# start lenient; tighten per-module over time
+# Not yet wired into `make check`/CI — run `mypy src/` in a connected env,
+# clear the findings, then add it to the gate.

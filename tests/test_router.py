@@ -24,13 +24,15 @@ def bot(monkeypatch, tmp_path):
     # Env defaults (SYNCBOT_TEST, dummy tokens) come from conftest so the import
     # below stays offline and never perturbs the session-scoped providers fixture.
     import slack_bot as b
+    import router
     from src.agent.preferences import NotificationPreferences
 
     # Never hit real Slack.
     monkeypatch.setattr(b.providers.slack, "post_digest", lambda *a, **k: True, raising=False)
     monkeypatch.setattr(b.providers.slack, "post_message", lambda *a, **k: True, raising=False)
-    # Isolate prefs to a tmp file so tests don't pollute data/.
+    # Isolate prefs + the unmatched-query log to tmp so tests don't pollute data/.
     monkeypatch.setattr(b.digest_gen, "prefs", NotificationPreferences(path=str(tmp_path / "prefs.json")))
+    monkeypatch.setattr(router, "UNMATCHED_LOG", str(tmp_path / "unmatched.jsonl"))
     # No network for channel-name resolution.
     monkeypatch.setattr(b, "_channel_display_name", lambda cid: cid)
     return b
@@ -89,6 +91,27 @@ def test_help_is_role_framed(bot):
     assert "leadership view" in bot.handle_query("help", role="lead").lower()
     # default role gets no tailored highlight, just the full list
     assert "Full list" not in bot.handle_query("help")
+
+
+def test_unmatched_query_is_logged_and_surfaced(bot):
+    import router
+    import json
+    import os
+    out = bot.handle_query("please reticulate the splines")
+    assert "didn't catch that" in out.lower()
+    assert os.path.exists(router.UNMATCHED_LOG)
+    logged = [json.loads(line)["text"] for line in open(router.UNMATCHED_LOG)]
+    assert "please reticulate the splines" in logged
+    # the backlog command surfaces it, ranked
+    assert "reticulate the splines" in bot.handle_query("unmatched").lower()
+
+
+def test_help_is_not_logged_as_unmatched(bot):
+    import router
+    import os
+    bot.handle_query("help")
+    assert (not os.path.exists(router.UNMATCHED_LOG)
+            or "help" not in open(router.UNMATCHED_LOG).read().lower())
 
 
 # ── Digest targeting (needs the raw event for the channel id) ─────────────────
