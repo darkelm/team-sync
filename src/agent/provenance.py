@@ -23,6 +23,9 @@ from typing import Any
 
 # Module constant so tests can redirect it (monkeypatch) and prod can point it at a
 # durable volume. Mirrors `preferences.py`'s default-path-under-data/ idiom.
+# On an ephemeral host (e.g. Railway without a mounted volume) the audit trail is
+# lost on redeploy; set SYNCBOT_PROVENANCE_PATH to a path on a persistent volume
+# (e.g. /data/provenance.jsonl) to keep it durable.
 PROVENANCE_PATH = "data/provenance.jsonl"
 
 
@@ -40,7 +43,11 @@ class ProvenanceStore:
     """
 
     def __init__(self, path: str | None = None):
-        self.path = path if path is not None else PROVENANCE_PATH
+        # Precedence: explicit arg → SYNCBOT_PROVENANCE_PATH env (durable volume) →
+        # module default. The env read happens here (not at import) so a deploy can
+        # set it without reordering imports; tests that monkeypatch PROVENANCE_PATH
+        # and set no env var still win.
+        self.path = path if path is not None else os.getenv("SYNCBOT_PROVENANCE_PATH", PROVENANCE_PATH)
 
     def append(self, record: Any) -> None:
         """Append one provenance record as a single JSONL line."""
