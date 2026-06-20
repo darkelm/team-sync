@@ -40,6 +40,7 @@ import os
 import random as _random_module
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Callable, Optional
 
 from .membrane import Actor, Lane, ProvenanceRecord, ReviewPolicy
@@ -338,9 +339,7 @@ class ProposalStore:
     def append(self, proposal) -> None:
         """Append one proposal as a single JSONL line."""
         row = proposal.to_dict() if hasattr(proposal, "to_dict") else dict(proposal)
-        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        with open(self.path, "a") as f:
-            f.write(json.dumps(row) + "\n")
+        self._write_row(row)
 
     def append_all(self, proposals: list) -> None:
         """Append every proposal in order — the convenience the classifier's caller uses
@@ -348,17 +347,76 @@ class ProposalStore:
         for proposal in proposals:
             self.append(proposal)
 
+    def append_transition(self, transition) -> None:
+        """Append one :class:`ProposalTransition` as a single JSONL line.
+
+        STORAGE CHOICE — transitions share the SAME append-only file as proposals,
+        discriminated by a ``"kind": "transition"`` field (proposal rows carry no such
+        marker; see :meth:`_is_transition_row`). One file keeps the ordering of proposals
+        and their transitions in a single durable, append-only ledger — there is exactly
+        ONE audit trail to read, replay, and reason about, mirroring `provenance.py`'s
+        single-log discipline. A sibling file would split the timeline and reintroduce the
+        two-file ordering problem this design avoids. Both :meth:`current` and :meth:`all`
+        cope with the two row types.
+        """
+        row = transition.to_dict() if hasattr(transition, "to_dict") else dict(transition)
+        self._write_row(row)
+
+    def _write_row(self, row: dict) -> None:
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        with open(self.path, "a") as f:
+            f.write(json.dumps(row) + "\n")
+
     def recent(self, n: int) -> list[dict]:
-        """The most recent ``n`` proposals, newest LAST. ``n <= 0`` ⇒ ``[]``. Missing or
-        unreadable file ⇒ ``[]`` (a fresh store has no history yet)."""
+        """The most recent ``n`` rows, newest LAST. ``n <= 0`` ⇒ ``[]``. Missing or
+        unreadable file ⇒ ``[]`` (a fresh store has no history yet).
+
+        NOTE: ``recent`` returns RAW rows in append order — proposals AND transitions
+        alike (the full ledger tail). Callers wanting the folded current view use
+        :meth:`current`. Kept unchanged from v1: a proposals-only store tails identically.
+        """
         if n <= 0:
             return []
         rows = self._read_all()
         return rows[-n:] if n < len(rows) else rows
 
     def all(self) -> list[dict]:
-        """Every proposal, oldest first."""
+        """Every row, oldest first — proposals AND transitions interleaved in append
+        order (the complete append-only audit trail)."""
         return self._read_all()
+
+    def proposals(self) -> list[dict]:
+        """Only the OPENED-proposal rows, oldest first (transition rows AND the
+        provenance closer-rows from resolve/accept filtered out — see
+        :func:`_is_opened_proposal_row`)."""
+        return [r for r in self._read_all() if _is_opened_proposal_row(r)]
+
+    def transitions(self) -> list[dict]:
+        """Only the transition rows, oldest first (the audit of every state change)."""
+        return [r for r in self._read_all() if _is_transition_row(r)]
+
+    def current(self, item_ref: Optional[str] = None):
+        """Fold the transitions over the opened proposals to compute each proposal's
+        CURRENT status / assignee / resolution (latest transition wins).
+
+          - ``current()`` ⇒ ``list[CurrentProposal]`` for every opened proposal, oldest
+            first. A proposal with NO transitions reads ``OPEN`` (backward compatible).
+          - ``current(item_ref)`` ⇒ the single :class:`CurrentProposal`, or ``None`` if no
+            opened proposal carries that ref.
+
+        Replays the ledger in append order: each transition's ``toStatus`` overwrites the
+        prior status, and the resolver/assignee are carried from the relevant transition.
+        """
+        views = _fold_current(self._read_all())
+        if item_ref is not None:
+            return views.get(item_ref)
+        return list(views.values())
+
+    def progress(self) -> dict[str, int]:
+        """Counts by current status — ``{"open": .., "claimed": .., "resolved": ..,
+        "accepted": ..}`` — so a surface can render "3 open, 2 resolved". Convenience
+        wrapper over the module-level :func:`progress`."""
+        return progress(self)
 
     def _read_all(self) -> list[dict]:
         if not os.path.exists(self.path):
@@ -379,3 +437,322 @@ class ProposalStore:
         except OSError:
             return []
         return out
+
+
+# =============================================================================
+# SECTION 6 — Resolution workflow  (the audited state machine over proposals)
+#
+# The validated team need: design↔code divergences must be RESOLVED (tracked to
+# "done"), not just detected. A proposal is OPENED by `classify_divergences` (above);
+# this section adds the small, append-only state machine that drives it to closure.
+#
+# "The loop never decides": EVERY transition requires a human :class:`Actor` and is
+# recorded as a :class:`ProposalTransition` row appended to the SAME ledger. No record is
+# ever mutated or rewritten — the current view is COMPUTED by replaying transitions
+# (`current()` / `_fold_current`). A RESOLVED/ACCEPTED proposal's `decided_by` becomes
+# `{"type":"human","who":...}` (via `proposal_provenance`), never pending — closing the
+# "never just the loop decided" guarantee for the resolution path too.
+# =============================================================================
+
+
+class ProposalStatus(str, Enum):
+    """The CURRENT state of a proposal, computed by folding its transitions.
+
+      - ``OPEN``     — opened by the classifier, no one has claimed it (the resting state).
+      - ``CLAIMED``  — a human has taken ownership; an assignee is set.
+      - ``RESOLVED`` — closed by a human who updated design OR code (a ResolutionKind).
+      - ``ACCEPTED`` — the divergence is ACCEPTED / won't-fix (a deliberate non-change).
+
+    A proposal with NO transitions reads ``OPEN`` (backward compatible)."""
+    OPEN = "open"
+    CLAIMED = "claimed"
+    RESOLVED = "resolved"
+    ACCEPTED = "accepted"
+
+
+class ResolutionKind(str, Enum):
+    """HOW a RESOLVED/ACCEPTED proposal reached closure — the audited "what was done".
+
+      - ``DESIGN_UPDATED``       — the design side moved to the system (designer resolved).
+      - ``CODE_UPDATED``         — the code side adopted the divergence (dev resolved).
+      - ``DIVERGENCE_ACCEPTED``  — neither side changed; the divergence is accepted (won't-fix).
+    """
+    DESIGN_UPDATED = "design_updated"
+    CODE_UPDATED = "code_updated"
+    DIVERGENCE_ACCEPTED = "divergence_accepted"
+
+
+# Discriminator: a transition row carries this exact value in its ``kind`` field. Proposal
+# rows carry a ProposalKind (default "component") in ``kind`` — NEVER "transition" — so the
+# marker is unambiguous in the shared ledger. (See `ProposalStore.append_transition`.)
+_TRANSITION_KIND = "transition"
+
+
+def _is_transition_row(row: dict) -> bool:
+    """Is this ledger row a transition? Discriminates on the ``kind`` marker only."""
+    return isinstance(row, dict) and row.get("kind") == _TRANSITION_KIND
+
+
+def _is_opened_proposal_row(row: dict) -> bool:
+    """Is this ledger row an OPENED proposal (vs a transition or a provenance closer-row)?
+
+    Three row types share the one append-only ledger: opened proposals (from
+    `classify_divergences`), transition rows (``kind == "transition"``), and the bare
+    ProvenanceRecord rows `resolve`/`accept` append to stamp a human decider. Only the
+    opened-proposal row carries a ``component`` field (its `Proposal.to_dict` shape), so
+    that field is the unambiguous positive discriminator the fold + `proposals()` use."""
+    return (
+        isinstance(row, dict)
+        and not _is_transition_row(row)
+        and "component" in row
+    )
+
+
+@dataclass(frozen=True)
+class ProposalTransition:
+    """One audited state change on a proposal — an append-only ledger row, never mutated.
+
+    Records WHO drove it (a human :class:`Actor`), the FROM/TO status, an optional
+    :class:`ResolutionKind` (set on resolve/accept), a free-text note, and WHEN. The
+    ``item_ref`` joins back to the opened :class:`Proposal` (and to its provenance).
+    """
+    item_ref: str
+    from_status: ProposalStatus
+    to_status: ProposalStatus
+    actor: Actor
+    note: str = ""
+    resolution_kind: Optional[ResolutionKind] = None
+    at: str = ""  # ISO-8601
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": _TRANSITION_KIND,  # the discriminator (shared-ledger row type)
+            "itemRef": self.item_ref,
+            "fromStatus": self.from_status.value,
+            "toStatus": self.to_status.value,
+            "actor": self.actor.to_dict(),
+            "note": self.note,
+            "resolutionKind": self.resolution_kind.value if self.resolution_kind else None,
+            "at": self.at,
+        }
+
+
+@dataclass(frozen=True)
+class CurrentProposal:
+    """The FOLDED current view of one proposal: its opened row plus the replayed state
+    (status / assignee / resolution / last-actor). A read model — derived, never stored.
+
+      - ``item_ref``        — joins to the opened proposal + its transitions.
+      - ``status``          — the current :class:`ProposalStatus` (latest transition wins).
+      - ``proposal``        — the original opened-proposal dict (None only for an orphan
+                              transition with no matching opened row — defensive).
+      - ``assignee``        — the human id who CLAIMED it (carried while CLAIMED+).
+      - ``resolution_kind`` — the :class:`ResolutionKind` once RESOLVED/ACCEPTED, else None.
+      - ``resolved_by``     — the human id who RESOLVED/ACCEPTED it, else None.
+      - ``last_actor``      — the human id of the most recent transition, else None.
+      - ``last_at``         — the ISO-8601 timestamp of the most recent transition, else None.
+    """
+    item_ref: str
+    status: ProposalStatus
+    proposal: Optional[dict] = None
+    assignee: Optional[str] = None
+    resolution_kind: Optional[ResolutionKind] = None
+    resolved_by: Optional[str] = None
+    last_actor: Optional[str] = None
+    last_at: Optional[str] = None
+
+
+def _fold_current(rows: list[dict]) -> "dict[str, CurrentProposal]":
+    """Replay the ledger (proposals THEN their transitions, in append order) into the
+    current view per item_ref. Opened proposals seed OPEN; each transition overwrites the
+    status and carries assignee / resolution forward. Insertion order is preserved so
+    ``current()`` lists proposals oldest-first. A transition with no opened row is still
+    folded (defensive — its ``proposal`` stays None) so an audited state is never dropped."""
+    views: dict[str, CurrentProposal] = {}
+
+    # Pass 1: seed every opened proposal at OPEN (preserves first-seen order). Provenance
+    # closer-rows are skipped here — they carry no `component` and are NOT proposals.
+    for row in rows:
+        if not _is_opened_proposal_row(row):
+            continue
+        ref = row.get("itemRef")
+        if ref is None or ref in views:
+            continue
+        views[ref] = CurrentProposal(item_ref=ref, status=ProposalStatus.OPEN, proposal=row)
+
+    # Pass 2: replay transitions in append order (latest wins).
+    for row in rows:
+        if not _is_transition_row(row):
+            continue
+        ref = row.get("itemRef")
+        if ref is None:
+            continue
+        prev = views.get(ref) or CurrentProposal(item_ref=ref, status=ProposalStatus.OPEN)
+        to_status = ProposalStatus(row["toStatus"])
+        rkind = ResolutionKind(row["resolutionKind"]) if row.get("resolutionKind") else None
+        actor = row.get("actor") or {}
+        who = actor.get("id")
+        views[ref] = CurrentProposal(
+            item_ref=ref,
+            status=to_status,
+            proposal=prev.proposal,
+            # Assignee is set when CLAIMED and carried forward; resolution carries who/how.
+            assignee=who if to_status == ProposalStatus.CLAIMED else prev.assignee,
+            resolution_kind=rkind if rkind is not None else prev.resolution_kind,
+            resolved_by=who if to_status in (
+                ProposalStatus.RESOLVED, ProposalStatus.ACCEPTED) else prev.resolved_by,
+            last_actor=who,
+            last_at=row.get("at"),
+        )
+
+    return views
+
+
+# Terminal states no further transition may leave (a resolved/accepted proposal is done).
+_TERMINAL = (ProposalStatus.RESOLVED, ProposalStatus.ACCEPTED)
+
+
+def _require_human(actor: Actor) -> None:
+    """Every transition is human-driven — "the loop never decides". A non-human actor
+    (e.g. the agent) is rejected so autonomy can never close a proposal."""
+    if actor is None or actor.type != "human":
+        raise ValueError("a proposal transition requires a human actor (the loop never decides)")
+
+
+def _current_status(store: "ProposalStore", item_ref: str) -> ProposalStatus:
+    """The current status of one proposal, or OPEN when it has no transitions. Never
+    raises on a missing store file (a fresh store folds to OPEN for any ref)."""
+    view = store.current(item_ref)
+    return view.status if view is not None else ProposalStatus.OPEN
+
+
+def _transition(
+    store: "ProposalStore",
+    item_ref: str,
+    actor: Actor,
+    to_status: ProposalStatus,
+    *,
+    allowed_from: tuple[ProposalStatus, ...],
+    resolution_kind: Optional[ResolutionKind] = None,
+    note: str = "",
+    now: Optional[Callable[[], str]] = None,
+) -> ProposalTransition:
+    """Append one audited transition after validating the FROM state. Shared spine of
+    `claim` / `resolve` / `accept`.
+
+    ILLEGAL-TRANSITION BEHAVIOR — RAISE (chosen over silent no-op): an illegal move
+    (wrong source state, e.g. resolving an already-resolved item, or claiming a terminal
+    one) raises a clear ``ValueError``. Closure is consequential, so a bad transition is
+    surfaced loudly rather than swallowed. (Never raises on a missing store file — the
+    fold treats an unknown ref as OPEN.)
+
+    On success, the transition row is appended AND a fresh provenance record is written
+    for RESOLVED/ACCEPTED with ``decided_by = {"type":"human","who":...}`` (via
+    `proposal_provenance`) so the resolution is auditable as human-decided, never pending.
+    """
+    _require_human(actor)
+    clock = now if now is not None else _default_now
+    at = clock()
+
+    from_status = _current_status(store, item_ref)
+    if from_status not in allowed_from:
+        raise ValueError(
+            f"illegal transition for {item_ref!r}: {from_status.value} → {to_status.value} "
+            f"(allowed from: {', '.join(s.value for s in allowed_from)})"
+        )
+
+    transition = ProposalTransition(
+        item_ref=item_ref,
+        from_status=from_status,
+        to_status=to_status,
+        actor=actor,
+        note=note,
+        resolution_kind=resolution_kind,
+        at=at,
+    )
+    store.append_transition(transition)
+
+    # Closing a proposal stamps a human decider into the propose lane — never pending.
+    if to_status in _TERMINAL:
+        view = store.current(item_ref)
+        reach = None
+        if view is not None and view.proposal is not None:
+            reach = view.proposal.get("reach")
+        store.append(
+            proposal_provenance(
+                item_ref,
+                actor,
+                reach,
+                at,
+                decided_by={"type": "human", "who": actor.id},
+            )
+        )
+
+    return transition
+
+
+def claim(
+    store: "ProposalStore",
+    item_ref: str,
+    actor: Actor,
+    *,
+    note: str = "",
+    now: Optional[Callable[[], str]] = None,
+) -> ProposalTransition:
+    """OPEN → CLAIMED. A human takes ownership; the actor becomes the assignee. Raises a
+    ``ValueError`` if the proposal is not currently OPEN (already claimed / resolved /
+    accepted)."""
+    return _transition(
+        store, item_ref, actor, ProposalStatus.CLAIMED,
+        allowed_from=(ProposalStatus.OPEN,), note=note, now=now,
+    )
+
+
+def resolve(
+    store: "ProposalStore",
+    item_ref: str,
+    actor: Actor,
+    resolution_kind: ResolutionKind,
+    note: str = "",
+    *,
+    now: Optional[Callable[[], str]] = None,
+) -> ProposalTransition:
+    """→ RESOLVED. A human closes the divergence by updating design OR code (records
+    who/when/how). Allowed from OPEN or CLAIMED (a resolver may resolve directly without a
+    prior claim). Raises a ``ValueError`` if already RESOLVED/ACCEPTED. Stamps a human
+    decider into provenance (never pending)."""
+    return _transition(
+        store, item_ref, actor, ProposalStatus.RESOLVED,
+        allowed_from=(ProposalStatus.OPEN, ProposalStatus.CLAIMED),
+        resolution_kind=resolution_kind, note=note, now=now,
+    )
+
+
+def accept(
+    store: "ProposalStore",
+    item_ref: str,
+    actor: Actor,
+    note: str = "",
+    *,
+    now: Optional[Callable[[], str]] = None,
+) -> ProposalTransition:
+    """→ ACCEPTED. A human accepts the divergence (won't-fix) — a deliberate non-change,
+    recorded with ``ResolutionKind.DIVERGENCE_ACCEPTED``. Allowed from OPEN or CLAIMED.
+    Raises a ``ValueError`` if already RESOLVED/ACCEPTED. Stamps a human decider into
+    provenance (never pending)."""
+    return _transition(
+        store, item_ref, actor, ProposalStatus.ACCEPTED,
+        allowed_from=(ProposalStatus.OPEN, ProposalStatus.CLAIMED),
+        resolution_kind=ResolutionKind.DIVERGENCE_ACCEPTED, note=note, now=now,
+    )
+
+
+def progress(store: "ProposalStore") -> dict[str, int]:
+    """Counts by current status across all proposals — ``{"open", "claimed", "resolved",
+    "accepted"}`` — so a surface can render "3 open, 2 resolved". Every key is always
+    present (zero when none). Reads the folded current view (a fresh/missing store ⇒ all
+    zeros)."""
+    counts = {s.value: 0 for s in ProposalStatus}
+    for view in store.current():
+        counts[view.status.value] += 1
+    return counts
