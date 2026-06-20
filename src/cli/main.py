@@ -6,7 +6,6 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich import print as rprint
 
 app = typer.Typer(help="SyncBot CLI — validate team manifests and explore the dependency graph.")
 console = Console()
@@ -100,7 +99,7 @@ def graph(
 
     shared = dg.find_shared_components()
     if shared:
-        console.print(f"\n[yellow bold]⚠  Shared components (potential drift):[/yellow bold]")
+        console.print("\n[yellow bold]⚠  Shared components (potential drift):[/yellow bold]")
         for comp, owners in shared.items():
             console.print(f"   [yellow]{comp}[/yellow] owned by: {', '.join(owners)}")
 
@@ -315,7 +314,6 @@ def refresh_manifest(
     config: str = typer.Option("config.yaml", help="Path to config.yaml"),
 ):
     """Show what's changed in reality since the manifest was written."""
-    import yaml
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from src.builder.refresher import ManifestRefresher
 
@@ -369,7 +367,7 @@ def simulate_event(
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from src.agent.events import EventRouter, Event, TRIGGER_CATALOG
     if event_type not in TRIGGER_CATALOG:
-        console.print(f"[yellow]Unknown event type. Known triggers:[/yellow]")
+        console.print("[yellow]Unknown event type. Known triggers:[/yellow]")
         for k, v in TRIGGER_CATALOG.items():
             console.print(f"  • [cyan]{k}[/cyan] — {v}")
     router = EventRouter(_get_providers(config))
@@ -398,7 +396,7 @@ def onboard(
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from src.onboarding.extractor import extract
-    from src.onboarding.generator import generate, summary
+    from src.onboarding.generator import generate
 
     if source == "-":
         text = _sys.stdin.read()
@@ -432,7 +430,7 @@ def onboard(
     console.print("[dim]Extracting initiative structure…[/dim]")
     brief = extract(text)
 
-    console.print(f"\n[bold]Extracted:[/bold]")
+    console.print("\n[bold]Extracted:[/bold]")
     console.print(f"  Initiative: [cyan]{brief.title or brief.client or '(unnamed)'}[/cyan]")
     if brief.teams:
         console.print(f"  Teams: {', '.join(t.name for t in brief.teams)}")

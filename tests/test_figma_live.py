@@ -6,10 +6,8 @@ Figma REST API (/v1/files/{key}/components and /v1/files/{key}/component_sets).
 """
 from __future__ import annotations
 
-import os
-import pytest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.providers.live.figma import LiveFigmaProvider, _parse_file_key
 

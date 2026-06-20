@@ -12,7 +12,6 @@ import os
 import re
 from datetime import date
 from html.parser import HTMLParser
-from typing import Optional
 from ..core.schemas import ConfluencePage, DecisionLog
 
 

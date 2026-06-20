@@ -279,7 +279,7 @@ class TestRunSnapshotScan:
             {"id": "c1", "name": "Button", "file_name": "DS"},
         ])
         old_root = tmp_path / "nonexistent"
-        total = run_snapshot_scan(str(old_root), str(new_root), providers)
+        run_snapshot_scan(str(old_root), str(new_root), providers)
         # 1 work.created + 1 design.component_changed
         assert len(dispatch_stub) == 2
 

@@ -287,7 +287,6 @@ class TestSchemas:
 
     def test_outcome_schema(self):
         from src.core.schemas import Outcome
-        import datetime
         o = Outcome(
             id="OUT-X",
             name="Test Outcome",

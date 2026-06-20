@@ -25,12 +25,16 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov ruff
 
-      - name: Lint with ruff (tests only; src/ has pre-existing issues tracked separately)
-        run: ruff check tests/
+      - name: Structural lint (duplicate-def guard — the answer() shadow bug class)
+        run: python scripts/lint.py
+
+      - name: Lint with ruff
+        run: ruff check src/ tests/
 
       - name: Run tests with coverage
         run: |
           pytest tests/ -q --cov=src --cov-report=term-missing --cov-fail-under=70
         env:
+          SYNCBOT_TEST: "1"
           # Ensure no API key is set so tests exercise the heuristic path
           ANTHROPIC_API_KEY: ""

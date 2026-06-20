@@ -146,7 +146,7 @@ class EventRouter:
                         msg += f"\nThis affects: *{', '.join(journeys)}*"
                     if principles:
                         msg += f"\nPrinciples in play: {', '.join(principles)}"
-                    msg += f"\n\nWorth a quick look before your next design session."
+                    msg += "\n\nWorth a quick look before your next design session."
                 else:
                     # No notes → minimal, non-intrusive
                     journey_ctx = f" (part of the {', '.join(journeys)} journey)" if journeys else ""

@@ -1,6 +1,5 @@
 import json
 import os
-from datetime import datetime
 from typing import Optional
 from ...core.schemas import Ticket, TicketStatus
 from ..base import JiraProvider

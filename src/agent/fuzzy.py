@@ -7,7 +7,6 @@ misspelled team/component still resolves, and a true miss returns helpful
 from __future__ import annotations
 import difflib
 import re
-from typing import Optional
 
 
 def fuzzy_pick(query: str, options: list[str], n: int = 3, cutoff: float = 0.6) -> list[str]:

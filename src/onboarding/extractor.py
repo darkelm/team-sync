@@ -126,7 +126,9 @@ Initiative description:
 """
 
 def extract_ai(text: str) -> InitiativeBrief:
-    import os, json, anthropic
+    import os
+    import json
+    import anthropic
     client = anthropic.Anthropic()
     resp = client.messages.create(
         model=os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8"),

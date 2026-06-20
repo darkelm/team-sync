@@ -144,7 +144,6 @@ class MeetingAnalyzer:
         """
         signals: list[StrategySignal] = []
         seen: set = set()
-        full_text = " ".join(s.text for s in segments)
 
         for sig_type, cues in STRATEGY_CUE_MAP.items():
             for seg in segments:

@@ -6,7 +6,7 @@ cadence/severity/pause without touching manifests or code.
 from __future__ import annotations
 import json
 import os
-from datetime import date, datetime
+from datetime import date
 from typing import Optional
 
 SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}

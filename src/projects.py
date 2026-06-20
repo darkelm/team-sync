@@ -17,7 +17,6 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from functools import lru_cache
 
 REGISTRY_PATH = "data/project_registry.json"
 

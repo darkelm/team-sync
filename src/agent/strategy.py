@@ -11,7 +11,7 @@ import yaml
 
 from ..core.schemas import Journey, ExperiencePrinciple, Outcome, ResearchInsight
 from .detector import DriftDetector
-from .similarity import tokenize, jaccard
+from .similarity import tokenize
 from ..providers.factory import Providers
 
 

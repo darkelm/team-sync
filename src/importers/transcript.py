@@ -8,7 +8,6 @@ Handles the formats the common tools export:
 Output: a list of {speaker, text} segments with consecutive same-speaker lines merged.
 """
 from __future__ import annotations
-import os
 import re
 from dataclasses import dataclass
 

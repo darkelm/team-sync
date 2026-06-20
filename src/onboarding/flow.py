@@ -16,7 +16,7 @@ Any question can be skipped with "skip" or "not sure" — gaps become TODOs.
 from __future__ import annotations
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from .extractor import InitiativeBrief, extract
 
 
@@ -229,7 +229,7 @@ def _register_project(brief: "InitiativeBrief", output_dir: str, channel_id: str
         f"  • Config: `{config_path}` (written ✓)",
         f"  • Data: `{os.path.join(output_dir, slug)}/`",
         f"  • This channel is now scoped to *{title}* — all queries here use this project's data only.",
-        f"  • Other channels stay on their own projects.",
+        "  • Other channels stay on their own projects.",
         "",
         "_To add more channels: `@syncbot register this channel for " + title + "`_",
     ]

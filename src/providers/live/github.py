@@ -29,7 +29,7 @@ class LiveGitHubProvider(GitHubProvider):
             head_branch=item["head"]["ref"],
             created_at=datetime.fromisoformat(item["created_at"].replace("Z", "+00:00")),
             merged_at=datetime.fromisoformat(item["merged_at"].replace("Z", "+00:00")) if item.get("merged_at") else None,
-            linked_tickets=[l["title"] for l in item.get("labels", [])],
+            linked_tickets=[lbl["title"] for lbl in item.get("labels", [])],
         )
 
     def get_pull_requests(self, team: Optional[str] = None, status: Optional[str] = None) -> list[PullRequest]:

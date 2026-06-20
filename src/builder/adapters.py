@@ -56,7 +56,7 @@ class GitHistoryAdapter:
             ["git", "-C", self.repo_path, "log", f"-{self.max_commits}", "--format=%an"],
             capture_output=True, text=True, check=False,
         )
-        return [l.strip() for l in r.stdout.splitlines() if l.strip()]
+        return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
 
     def extract(self) -> list[Candidate]:
         authors = self._log()
