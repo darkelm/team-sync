@@ -26,7 +26,10 @@ from src.agent.events import Event
 from src.agent import freshness, instrumentation
 from src.agent import manifest_health
 from src.agent.provenance import ProvenanceStore
-from src.agent.propose import ProposalStore
+from src.agent.propose import (
+    ProposalStore, ResolutionKind, accept, claim, progress, resolve,
+)
+from src.agent.membrane import Actor
 
 
 def _freshness_line(team) -> str:
@@ -262,7 +265,41 @@ HELP_BODY = (
 )
 
 
-def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
+def _status_val(status) -> str:
+    """The string value of a ProposalStatus (enum or already-a-str)."""
+    return getattr(status, "value", status)
+
+
+def _active_proposals(store) -> list[dict]:
+    """Open+claimed proposals as opened-row dicts, OLDEST-first (so `_format_proposals`,
+    which reverses, shows newest first). Resolved/accepted ones are folded out via
+    `current()` — so a resolved proposal correctly drops off the board."""
+    rows: list[dict] = []
+    for cp in store.current():
+        if _status_val(getattr(cp, "status", None)) in ("open", "claimed") and getattr(cp, "proposal", None):
+            rows.append(cp.proposal)
+    return rows
+
+
+def _match_open_proposal(q: str, store) -> str | None:
+    """The component of an OPEN/CLAIMED proposal whose name appears in the query — so a
+    claim/resolve lands on a real item, not a typo."""
+    try:
+        for cp in store.current():
+            if _status_val(getattr(cp, "status", None)) not in ("open", "claimed"):
+                continue
+            ref = getattr(cp, "item_ref", "") or ""
+            comp = (cp.proposal or {}).get("component") if getattr(cp, "proposal", None) else None
+            if not comp and ref.startswith("proposal:"):
+                comp = ref.split("proposal:", 1)[1]
+            if comp and comp.lower() in q:
+                return comp
+    except Exception:
+        return None
+    return None
+
+
+def handle_query(text: str, eng: dict | None = None, role: str = "ic", actor: str = "") -> str:
     # Unpack the engine bundle into locals so the body below is project-scoped
     # without per-reference edits; defaults to config.yaml's engines.
     eng = eng or _DEFAULT_ENGINES
@@ -330,11 +367,62 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
         records = ProvenanceStore().recent(10)
         return _format_provenance(records)
 
+    # Drive the resolution loop on a design↔code proposal — claim / resolve / accept.
+    # A HUMAN always decides (the actor is the Slack user); the named component is matched
+    # against the OPEN/CLAIMED proposals so the action lands on a real item. "Resolution,
+    # not just awareness" — this closes a proposal to done and records who/how.
+    if q.startswith(("claim ", "resolve ", "accept ")) or "i'll take" in q or "ill take" in q:
+        store = ProposalStore()
+        comp = _match_open_proposal(q, store)
+        if not comp:
+            return ("I couldn't match that to an open design↔code proposal. "
+                    "Try `proposals` to see the open ones.")
+        item_ref = f"proposal:{comp}"
+        who = Actor(type="human", id=actor or "unknown")
+        try:
+            if q.startswith("claim ") or "i'll take" in q or "ill take" in q:
+                claim(store, item_ref, who)
+                return (f"✅ You've claimed the *{comp}* proposal. When it's closed, run "
+                        f"`resolve {comp} code-updated` / `design-updated`, or `accept {comp}` "
+                        f"if the divergence is intentional.")
+            if q.startswith("accept ") or "won't fix" in q or "wont fix" in q:
+                accept(store, item_ref, who)
+                return (f"✅ *{comp}* divergence accepted (won't-fix) — recorded to you and "
+                        f"off the open board.")
+            # resolve — which side moved?
+            if "code" in q:
+                kind = ResolutionKind.CODE_UPDATED
+            elif "design" in q:
+                kind = ResolutionKind.DESIGN_UPDATED
+            else:
+                return (f"How was *{comp}* resolved? `resolve {comp} code-updated` (code now "
+                        f"matches) or `resolve {comp} design-updated` (design moved) — or "
+                        f"`accept {comp}` to accept the divergence.")
+            resolve(store, item_ref, who, kind)
+            return (f"✅ *{comp}* resolved — {kind.value.replace('_', ' ')}, recorded to you. "
+                    f"It's closed and in the audit trail.")
+        except ValueError as e:
+            return f"Couldn't update *{comp}*: {e}  (run `proposals` for current state)."
+
+    # Resolution progress — close the loop ("how are we doing on divergences?").
+    if (q.strip() in ("proposal progress", "proposals progress", "divergence progress",
+                       "resolution progress", "proposals status")
+            or "divergence progress" in q or "resolution progress" in q):
+        counts = progress(ProposalStore())
+        if not sum(counts.values()):
+            return "No design↔code proposals yet."
+        return ("*Design↔code resolution progress*\n"
+                f"• open: {counts.get('open', 0)}\n"
+                f"• claimed (in progress): {counts.get('claimed', 0)}\n"
+                f"• resolved: {counts.get('resolved', 0)}\n"
+                f"• accepted (won't-fix): {counts.get('accepted', 0)}")
+
     # Open design↔code proposals — the joint artifacts the propose lane produces.
     # Rendered as a SHARED decision (both owners named), never a one-way alert. Triggers
     # are scoped tightly so they don't collide with the design-sync/"drift" handler (which
     # owns "design system"/"in sync") or the scan/predict "conflict" handlers further down —
-    # these specific design↔code phrasings are claimed here first.
+    # these specific design↔code phrasings are claimed here first. The board reflects the
+    # FOLDED status (current()): claimed ones still show, resolved/accepted drop off.
     if (q.strip() in ("proposals", "open proposals", "divergences", "joint artifacts",
                        "what's diverging", "whats diverging")
             or any(p in q for p in ["open proposals", "design code conflicts",
@@ -342,11 +430,7 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
                                     "design-dev conflicts", "what's diverging",
                                     "whats diverging", "joint artifacts",
                                     "open divergences", "pending proposals"])):
-        # Read-only, same shape as the governance-log command: instantiate the store with
-        # no arg so it reads PROPOSALS_PATH (or the SYNCBOT_PROPOSALS_PATH durable-volume
-        # env). Tests redirect the module path.
-        rows = ProposalStore().recent(20)
-        return _format_proposals(rows)
+        return _format_proposals(_active_proposals(ProposalStore()))
 
     # Proactive trigger preview — "what happens if X changes" (source-agnostic)
     if q.startswith("simulate") or "what happens if" in q or "what would happen if" in q:

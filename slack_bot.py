@@ -72,7 +72,7 @@ app = App(token=os.environ.get("SLACK_BOT_TOKEN", "xoxb-test"),
 
 
 def answer(text: str, role: str = "ic", project_config: str = "config.yaml",
-           eng: dict | None = None) -> str:
+           eng: dict | None = None, actor: str = "") -> str:
     """Answer a question, scoped to a project and framed for the audience's role.
 
     project_config isolates the AI-agent path; eng is the per-project keyword
@@ -90,7 +90,7 @@ def answer(text: str, role: str = "ic", project_config: str = "config.yaml",
         except Exception as e:
             log.warning("agent error, falling back to keywords: %s", e)
     if not reply:
-        reply = handle_query(text, eng, role)
+        reply = handle_query(text, eng, role, actor)
     if is_non_technical(role) and AGENT is None:
         reply = plainify(reply)
     return reply
@@ -340,7 +340,7 @@ def handle_mention(event, say):
     role = audience.role_for(event.get("user", ""), channel_id)
     project = project_registry.for_channel(channel_id)
     say(answer(text, role, project_config=project.config,
-               eng=_project_engines(channel_id)), thread_ts=thread_ts)
+               eng=_project_engines(channel_id), actor=event.get("user", "")), thread_ts=thread_ts)
 
 
 def _ingest_slack_files(event) -> str:
@@ -382,7 +382,7 @@ def handle_dm(event, say):
             say(role_msg, thread_ts=event.get("thread_ts"))
             return
         role = audience.role_for(event.get("user", ""), event.get("channel", ""))
-        say(answer(text, role), thread_ts=event.get("thread_ts"))
+        say(answer(text, role, actor=event.get("user", "")), thread_ts=event.get("thread_ts"))
 
 
 @app.event("member_joined_channel")

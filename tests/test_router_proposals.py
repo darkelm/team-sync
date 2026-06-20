@@ -17,7 +17,9 @@ from src.agent.membrane import Actor
 from src.agent.propose import (
     DivergenceFinding,
     ProposalStore,
+    ResolutionKind,
     classify_divergences,
+    resolve,
 )
 
 FIXED_NOW = "2026-06-19T00:00:00.000Z"
@@ -146,35 +148,69 @@ def test_empty_store_is_honest(bot):
 # ── a resolved proposal is NOT shown as open ─────────────────────────────────────
 
 def test_resolved_proposal_is_not_shown_as_open(bot):
-    """Once a human resolves a proposal (decidedBy type 'human'), it is no longer an open
-    joint artifact and must drop off this surface — only PENDING ones are shown."""
-    # One open (pending) proposal and one resolved one, written directly so we control the
-    # decider. The resolved row carries decidedBy {human, who} on BOTH the top level and
-    # the embedded provenance (mirroring how a resolver would stamp it).
-    open_p = classify_divergences([_finding(component="StillOpen")], now=lambda: FIXED_NOW)[0]
-    resolved_p = classify_divergences([_finding(component="AlreadyDecided")], now=lambda: FIXED_NOW)[0]
-    resolved_row = resolved_p.to_dict()
-    resolved_row["decidedBy"] = {"type": "human", "who": "cory"}
-    resolved_row["provenance"]["decidedBy"] = {"type": "human", "who": "cory"}
-
+    """Once a human RESOLVES a proposal (a resolve transition), the board reflects the
+    folded status: the resolved one drops off, only open/claimed remain."""
+    _seed(bot, [_finding(component="StillOpen")])
+    _seed(bot, [_finding(component="AlreadyDecided")])
     store = ProposalStore(path=bot._prop_path)
-    store.append(open_p)
-    store.append(resolved_row)  # ProposalStore.append accepts a plain dict in proposal shape
+    resolve(store, "proposal:AlreadyDecided", Actor(type="human", id="cory"),
+            ResolutionKind.CODE_UPDATED)
 
     out = bot.handle_query("open proposals")
     assert "StillOpen" in out
     assert "AlreadyDecided" not in out
-    assert "1 awaiting" in out  # only the one open proposal is counted
+    assert "1 awaiting" in out  # only the one still-open proposal is counted
 
 
 def test_only_resolved_proposals_yields_empty_message(bot):
-    """If every proposal in the store has been resolved, the surface is honestly empty."""
-    resolved = classify_divergences([_finding(component="DoneDeal")], now=lambda: FIXED_NOW)[0]
-    row = resolved.to_dict()
-    row["decidedBy"] = {"type": "human", "who": "cory"}
-    ProposalStore(path=bot._prop_path).append(row)
+    """If every proposal has been resolved, the board is honestly empty."""
+    _seed(bot, [_finding(component="DoneDeal")])
+    resolve(ProposalStore(path=bot._prop_path), "proposal:DoneDeal",
+            Actor(type="human", id="cory"), ResolutionKind.DESIGN_UPDATED)
     out = bot.handle_query("proposals")
     assert out == "No open design↔code proposals right now."
+
+
+# ── the resolution loop: claim / resolve / accept / progress ─────────────────────
+
+def test_claim_command_claims_for_the_actor(bot):
+    _seed(bot, [_finding(component="PriceTag")])
+    out = bot.handle_query("claim PriceTag", actor="dana")
+    assert "claimed" in out.lower() and "PriceTag" in out
+    # still on the open board (claimed stays active), and progress shows it claimed
+    assert "PriceTag" in bot.handle_query("proposals")
+    prog = bot.handle_query("resolution progress")
+    assert "claimed (in progress): 1" in prog
+
+
+def test_resolve_command_closes_and_records_human(bot):
+    _seed(bot, [_finding(component="PriceTag")])
+    out = bot.handle_query("resolve PriceTag code-updated", actor="cory")
+    assert "resolved" in out.lower()
+    # drops off the board, and the audit trail names the human resolver
+    assert "PriceTag" not in bot.handle_query("proposals")
+    rows = ProposalStore(path=bot._prop_path).all()
+    assert any(r.get("decidedBy", {}).get("who") == "cory" for r in rows)
+
+
+def test_accept_command_marks_wontfix(bot):
+    _seed(bot, [_finding(component="PriceTag")])
+    out = bot.handle_query("accept PriceTag", actor="dana")
+    assert "accept" in out.lower()
+    assert "PriceTag" not in bot.handle_query("proposals")
+    assert "accepted (won't-fix): 1" in bot.handle_query("proposals progress")
+
+
+def test_resolve_without_kind_prompts(bot):
+    _seed(bot, [_finding(component="PriceTag")])
+    out = bot.handle_query("resolve PriceTag", actor="cory").lower()
+    assert "how was" in out and "code-updated" in out
+
+
+def test_resolve_unknown_component_is_honest(bot):
+    _seed(bot, [_finding(component="PriceTag")])
+    out = bot.handle_query("resolve Nonexistent code-updated", actor="cory").lower()
+    assert "couldn't match" in out or "could not match" in out
 
 
 def test_injected_proposer_agent_does_not_break_rendering(bot):
