@@ -45,6 +45,7 @@ from fastapi.responses import JSONResponse
 from src.agent.detector import BREAKING_CHANGE_LABEL, is_floor_violation
 from src.agent.events import Event, EventRouter, TRIGGER_CATALOG
 from src.providers.factory import Providers
+from src.agent.propose import DivergenceFinding, ProposalStore, classify_divergences
 
 # ---------------------------------------------------------------------------
 # App + providers
@@ -502,6 +503,96 @@ async def webhook_github(
 
 
 # ---------------------------------------------------------------------------
+# Design↔code divergence → the propose lane (joint artifacts)
+# ---------------------------------------------------------------------------
+
+def _lookup_figma_component(comp_name: str, providers: Providers):
+    """The FigmaComponent for a name (it carries diverges_from_library /
+    divergence_notes), or None. A name can resolve to several teams' versions; prefer
+    a DIVERGING one (that's the signal we act on), else the first. Best-effort — never
+    raises into the webhook."""
+    try:
+        matches = providers.figma.get_components_by_name(comp_name)
+        if not matches:
+            return None
+        for c in matches:
+            if getattr(c, "diverges_from_library", False):
+                return c
+        return matches[0]
+    except Exception as e:
+        log.warning("figma component lookup failed comp=%s: %s", comp_name, e)
+        return None
+
+
+def _divergence_owners(comp_name: str, providers: Providers) -> tuple[str, str]:
+    """(design_owner_team, code_owner_team) — the two sides of a joint artifact.
+    Either may be '' when unowned. Best-effort; never raises."""
+    design_owner = code_owner = ""
+    target = comp_name.lower()
+    try:
+        for t in providers.manifests.get_all_teams():
+            if not design_owner and any(c.name.lower() == target for c in t.components.design):
+                design_owner = t.team
+            if not code_owner and any(c.name.lower() == target for c in t.components.code):
+                code_owner = t.team
+    except Exception as e:
+        log.warning("divergence owner lookup failed comp=%s: %s", comp_name, e)
+    return design_owner, code_owner
+
+
+def _open_divergence_proposal(figma_comp, comp_name: str, team: str, file_key: str,
+                              providers: Providers, router: EventRouter) -> int:
+    """A divergent design↔code component becomes a PROPOSE-lane joint artifact: it is
+    recorded (pending, decided by a human) and BOTH owners are notified — not one-way.
+    Returns the number of proposals opened."""
+    notes = getattr(figma_comp, "divergence_notes", None) or f"{comp_name} diverges from the shared library."
+    owner_design, code_owner = _divergence_owners(comp_name, providers)
+    # Attribute the design side to the team whose file actually diverges, when known.
+    design_owner = getattr(figma_comp, "team", "") or owner_design or team
+    figma_url = f"https://www.figma.com/file/{file_key}" if file_key else None
+    try:
+        reach = router.reach(comp_name)
+    except Exception:
+        reach = None
+    finding = DivergenceFinding(
+        component=comp_name,
+        divergence_notes=notes,
+        design_owner=design_owner,
+        code_owner=code_owner,
+        figma_url=figma_url,
+        reach=reach,
+    )
+    proposals = classify_divergences([finding])
+    if not proposals:
+        return 0
+    try:
+        ProposalStore().append_all(proposals)
+    except OSError as e:
+        log.warning("proposal store append failed comp=%s: %s", comp_name, e)
+    # Dual-owner notify — the joint artifact goes to BOTH sides, not the consumers.
+    msg = (
+        f"🤝 *Design↔code proposal — {comp_name}*\n"
+        f"{notes}\n"
+        f"design: *{design_owner or '—'}*  ↔  code: *{code_owner or '—'}* — "
+        f"needs a joint decision (stays open until you agree)."
+        + (f"\n{figma_url}" if figma_url else "")
+    )
+    notified: set[str] = set()
+    for owner in (design_owner, code_owner):
+        if not owner or owner in notified:
+            continue
+        notified.add(owner)
+        try:
+            t = providers.manifests.get_team(owner)
+            channel = t.slack_channel if t else ""
+            if channel:
+                providers.slack.post_message(channel, msg)
+        except Exception as e:
+            log.warning("dual-owner proposal notify failed owner=%s: %s", owner, e)
+    return len(proposals)
+
+
+# ---------------------------------------------------------------------------
 # /webhooks/figma
 # ---------------------------------------------------------------------------
 
@@ -558,12 +649,18 @@ async def webhook_figma(request: Request) -> JSONResponse:
     # design decision (version notes) not just the artifact change.
     team = _figma_file_to_team(file_key, file_name, providers)
     total_dispatched = 0
+    proposals_opened = 0
     router = EventRouter(providers)
 
     for comp in (cross_journey_components or all_components[:3]):
         comp_name = comp if isinstance(comp, str) else comp.get("name", file_name)
         journeys_affected = _journeys_for_component(comp_name, providers)
         principles_relevant = _principles_for_component(comp_name, providers)
+
+        # Design↔code divergence drives the membrane's `novel` signal AND, when the
+        # design diverges from the library, opens a propose-lane joint artifact.
+        figma_comp = _lookup_figma_component(comp_name, providers)
+        diverged = bool(getattr(figma_comp, "diverges_from_library", False))
 
         # Build design-language metadata for the EventRouter to use in messages
         event = Event(
@@ -579,14 +676,20 @@ async def webhook_figma(request: Request) -> JSONResponse:
                 "principles_relevant": principles_relevant,
                 "components_created": [c.get("name") for c in created if isinstance(c, dict)],
                 "components_modified": [c.get("name") for c in modified if isinstance(c, dict)],
+                "novel": diverged,
             },
         )
         n = router.dispatch(event)
         total_dispatched += n
+        if diverged:
+            proposals_opened += _open_divergence_proposal(
+                figma_comp, comp_name, team, file_key, providers, router
+            )
 
-    log.info("figma library_publish dispatched=%d file=%s decision=%s",
-             total_dispatched, file_name, bool(version_notes))
+    log.info("figma library_publish dispatched=%d proposals=%d file=%s decision=%s",
+             total_dispatched, proposals_opened, file_name, bool(version_notes))
     return JSONResponse({"dispatched": total_dispatched,
+                         "proposals_opened": proposals_opened,
                          "decision_context": bool(version_notes),
                          "cross_journey_components": len(cross_journey_components)})
 

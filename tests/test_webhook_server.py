@@ -422,6 +422,41 @@ class TestFigmaWebhook:
             "modified": [],
         }
 
+    def test_divergent_component_opens_proposal(self, client, dispatch_stub, monkeypatch, tmp_path):
+        """A published component that diverges from the library flags the event `novel`
+        AND opens a propose-lane joint artifact. DataTable diverges in the synthetic org
+        (Atlas: row-hover out of sync), so publishing it should open one proposal."""
+        prop_path = str(tmp_path / "proposals.jsonl")
+        monkeypatch.setenv("SYNCBOT_PROPOSALS_PATH", prop_path)
+        payload = self._library_publish_payload()
+        payload["created"] = [{"name": "DataTable"}]
+        payload["description"] = "Updated DataTable row hover to blue-50"  # version notes → not skipped
+        resp = client.post("/webhooks/figma", json=payload)
+        assert resp.status_code == 200
+        assert resp.json()["proposals_opened"] >= 1
+        # the dispatched event is flagged novel (the divergence signal reached the membrane)
+        assert any(e.subject == "DataTable" and e.metadata.get("novel") is True for e in dispatch_stub)
+        # the joint artifact is persisted in the propose lane
+        from src.agent.propose import ProposalStore
+        rows = ProposalStore(prop_path).all()
+        assert any(
+            r.get("lane") == "propose" and "DataTable" in (r.get("component") or r.get("itemRef") or "")
+            for r in rows
+        )
+
+    def test_non_divergent_component_opens_no_proposal(self, client, dispatch_stub, monkeypatch, tmp_path):
+        """A normal (non-divergent) publish flags the event not-novel and opens no
+        proposal — the additive path doesn't disturb routine library publishes."""
+        prop_path = str(tmp_path / "proposals.jsonl")
+        monkeypatch.setenv("SYNCBOT_PROPOSALS_PATH", prop_path)
+        payload = self._library_publish_payload()
+        payload["created"] = [{"name": "Button"}]  # Button diverges in no team
+        payload["description"] = "Tightened Button focus ring"
+        resp = client.post("/webhooks/figma", json=payload)
+        assert resp.status_code == 200
+        assert resp.json()["proposals_opened"] == 0
+        assert dispatch_stub and all(e.metadata.get("novel") is False for e in dispatch_stub)
+
     def test_bad_passcode_returns_401(self, client):
         payload = self._library_publish_payload(passcode="wrong")
         resp = client.post("/webhooks/figma", json=payload)
