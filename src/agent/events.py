@@ -117,13 +117,41 @@ class EventRouter:
     # the existing notify-all behavior is untouched. The orchestrator wires the lane
     # decision into the live event path (e.g. gate dispatch on lane, persist provenance).
 
+    def _tier_for_subject(self, subject: str) -> str:
+        """Look up the governance tier of the component named by an event subject.
+
+        Reads the component's `tier` (CodeComponent/DesignComponent) off the team
+        manifests the router can reach. Returns "raw" when the subject is empty,
+        the component isn't found, or it carries no tier. Robust by design — a bad
+        subject, an unknown team, or a missing manifest must never raise here
+        (tier inference is best-effort; the safe default is the least-autonomous
+        bucket)."""
+        if not subject:
+            return "raw"
+        target = subject.lower()
+        try:
+            for team in self.p.manifests.get_all_teams():
+                for comp in team.components.code + team.components.design:
+                    if comp.name.lower() == target:
+                        return (getattr(comp, "tier", None) or "raw").lower()
+        except Exception as e:
+            # Best-effort: any manifest/provider failure degrades to the safe
+            # default rather than breaking routing.
+            print(f"[events] _tier_for_subject({subject!r}) failed: {e}", flush=True)
+        return "raw"
+
     def _event_route_item(self, event: "Event"):
         """Build the membrane RouteItem for an event. `key` = the component subject;
-        `path` carries a tier head (so `tier_of` can bucket it) — defaulting to `raw`
-        when the event metadata gives no tier; `kind` maps the event type to a change
-        kind. All overridable via event.metadata ("tier", "kind")."""
+        `path` carries a tier head (so `tier_of` can bucket it); `kind` maps the
+        event type to a change kind.
+
+        Tier resolution: an explicit `event.metadata["tier"]` ALWAYS wins; when
+        absent, the tier is derived from the actual component (the manifest
+        `tier` for the component named by `event.subject`), falling back to "raw"
+        for unknown components. All overridable via event.metadata ("tier", "kind")."""
         from . import membrane
-        tier = (event.metadata.get("tier") or "raw").lower()
+        meta_tier = event.metadata.get("tier")
+        tier = (meta_tier or self._tier_for_subject(event.subject)).lower()
         # The membrane reads tier off the path head; encode the event's consequence
         # tier as that head so tier_of() resolves it (contract §7/§10).
         path = f"{tier}/{event.subject}" if event.subject else tier

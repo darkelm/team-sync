@@ -62,10 +62,25 @@ class TeamMember(BaseModel):
     slack_handle: str
     email: str
 
+# Governance consequence tier of a component, consumed by the routing membrane
+# (src/agent/membrane.py — `Tier` / `tier_of`). Three values, highest→lowest
+# consequence:
+#   "brand"  — brand/foundational; highest consequence (e.g. design-system core,
+#              tokens, primitive components). Policies route these to review.
+#   "shared" — cross-product/system-level; used by multiple teams.
+#   "raw"    — leaf/lowest consequence; the safest, least-autonomous default and
+#              the only tier eligible for `auto` under a permissive policy.
+# `str` (not an Enum) keeps it backward-compatible: existing manifests/tests that
+# omit `tier` keep loading and simply default to "raw".
+Tier = str  # "brand" | "shared" | "raw"
+
 class CodeComponent(BaseModel):
     name: str
     path: str
     description: str
+    # Governance consequence tier: "brand" | "shared" | "raw" (see Tier above /
+    # membrane.py). Drives membrane routing; defaults to the safest bucket.
+    tier: Tier = "raw"
     # Deprecation lifecycle (RFC 8594-style Sunset semantics for design systems).
     deprecated: bool = False
     sunset_date: Optional[date] = None   # when consumers must be off it
@@ -75,6 +90,9 @@ class DesignComponent(BaseModel):
     name: str
     figma_node_id: Optional[str] = None
     description: str
+    # Governance consequence tier: "brand" | "shared" | "raw" (see Tier above /
+    # membrane.py). Drives membrane routing; defaults to the safest bucket.
+    tier: Tier = "raw"
     deprecated: bool = False
     sunset_date: Optional[date] = None
     replacement: Optional[str] = None
