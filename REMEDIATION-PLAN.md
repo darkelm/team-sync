@@ -99,9 +99,11 @@ noise, design-surface fit, and measurement.
 
 Suite: **472 tests, hermetic, green.**
 
+### Done since
+- ✅ **mypy prepped** — dev dep + non-blocking CI step (`continue-on-error`) + `make typecheck`. Run on a connected machine, clear findings, then flip it into `make check`.
+- ✅ **Light structured logging** — `src/log.py` rotating-file audit trail (`data/syncbot.log`) wired at all entry points; operational/error prints converted to the logger. Full structured/aggregation still pairs with hosting.
+
 ### Parked (owner's call)
 - Railway hosting (the research's #1 pilot prerequisite) — deferred.
 - AI / natural-language mode (Anthropic key) — deferred.
-- mypy gate — config added, not wired (needs a connected env to verify).
-- One-tenant-per-client migration — spec'd, not built.
-- Structured logging — pairs with hosting.
+- One-tenant-per-client migration — spec'd (`docs/TENANCY.md`), not built.
