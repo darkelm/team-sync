@@ -1,7 +1,7 @@
 PY := .venv/bin/python3
 RUFF := .venv/bin/ruff
 
-.PHONY: check test lint typecheck run
+.PHONY: check test lint typecheck run demo-divergence
 
 # One command to verify the repo before you push or hand it to someone.
 check: lint test
@@ -23,3 +23,8 @@ lint:
 
 run:
 	$(PY) slack_bot.py
+
+# Watch the whole design<->code divergence loop fire on synthetic data (no creds):
+# Figma publish -> proposal opened -> both owners pinged -> claim -> resolve -> board clears.
+demo-divergence:
+	$(PY) demo_divergence_loop.py

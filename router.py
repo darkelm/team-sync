@@ -260,6 +260,11 @@ HELP_BODY = (
     "• `@syncbot only alert <team> on high` — set digest severity threshold\n"
     "• `@syncbot dependencies for <team>` — dependency map\n"
     "• `@syncbot what's being deprecated` — sunset watch: retiring components + who's still on them\n"
+    "• `@syncbot proposals` — open design↔code divergences (a shared decision; both owners named)\n"
+    "• `@syncbot claim <component>` — take ownership of a design↔code divergence\n"
+    "• `@syncbot resolve <component> code-updated|design-updated` — close it (records who + how)\n"
+    "• `@syncbot accept <component>` — accept the divergence as intentional (won't-fix)\n"
+    "• `@syncbot resolution progress` — divergence board: open / claimed / resolved counts\n"
     "• `@syncbot mark <team> stale` — flag wrong/outdated data (clears with `<team> is verified`)\n"
     "• `@syncbot stats` — iteration backlog: unanswered questions + flagged teams"
 )
