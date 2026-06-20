@@ -82,3 +82,26 @@ and one deferral (3.4 per-project prefs, rationale above).
   observability; `print(..., flush=True)` is fine for the local process).
 
 Suite: **429 tests, hermetic, green.** `make check` + CI gate it.
+
+---
+
+## Phase T — Trust & Fit (from the deep-research review)
+
+Addresses the research's make-or-break themes: freshness, answer trust, alert
+noise, design-surface fit, and measurement.
+
+- ✅ **Freshness engine** (`freshness.py`) — decay score per team (fresh/aging/stale/unverified).
+- ✅ **Answer stamping + confidence** — who-owns / up-to-speed answers carry a freshness line; low-confidence matches say so.
+- ✅ **`mark <team> stale` + `stats`** (`instrumentation.py`) — turn "this is wrong" into a signal freshness respects; misses + flagged teams roll up as one iteration backlog.
+- ✅ **Notification discipline** — a proactive alert fires only when cross-team + high-confidence + actionable + fresh; per-alert dedup.
+- ✅ **Figma-native ingestion** — `get_dev_status` / `get_open_comments` / `get_recent_changes` (ready-for-dev, comments, version changes) + `@syncbot dev status for <team>`. Live activates on a Figma token.
+- ✅ **Tenancy migration spec** — `docs/TENANCY.md` (one-tenant-per-client), documented as deferred future work.
+
+Suite: **472 tests, hermetic, green.**
+
+### Parked (owner's call)
+- Railway hosting (the research's #1 pilot prerequisite) — deferred.
+- AI / natural-language mode (Anthropic key) — deferred.
+- mypy gate — config added, not wired (needs a connected env to verify).
+- One-tenant-per-client migration — spec'd, not built.
+- Structured logging — pairs with hosting.
