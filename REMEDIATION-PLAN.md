@@ -58,6 +58,27 @@ Status: ✅ done · ⏸️ deferred (with rationale) · ⬜ todo (manual)
 
 ---
 
-**Net:** every plan item is done except 0.4 (your manual Slack reinstall) and two
-deliberate deferrals (2.1 registry extraction, 3.4 per-project prefs) with the
-rationale above. Suite: 420 tests, hermetic, green. `make check` gates it.
+**Net (Phase 0–5):** every plan item is done except 0.4 (your manual Slack reinstall)
+and one deferral (3.4 per-project prefs, rationale above).
+
+---
+
+## Hardening pass 2 (strong / scalable / modular / performant)
+
+- ✅ CI gate: CI now runs the duplicate-def guard (`scripts/lint.py`) + `ruff check
+  src/ tests/`; `make check` mirrors it. All 51 ruff findings cleared.
+- ✅ Perf: per-project engine bundle memoized; local providers (jira/confluence/
+  figma/github) read disk once.
+- ✅ Coverage: AI-agent path tested (mocked Anthropic) + tool-dispatch tests;
+  deterministic frozen-time cross-team-PR detector test.
+- ✅ Modular (2.1): `slack_bot.py` god-file (1005 → 409 lines) split into
+  `bootstrap.py` (engine state) + `router.py` (keyword brain), one-directional
+  layering, no circular imports. (The keyword router is now isolated/testable; an
+  ordered matcher-registry inside it remains optional polish.)
+- ✅ Docs: SECURITY.md secret inventory + rotation runbook + pre-engagement checklist.
+- ⏸️ Type checking (mypy): recommended; blocked in the offline sandbox (can't
+  install/verify). Add a lenient mypy config + CI step in a connected env.
+- ⏸️ Structured logging: deferred to pair with hosting (its payoff is prod
+  observability; `print(..., flush=True)` is fine for the local process).
+
+Suite: **429 tests, hermetic, green.** `make check` + CI gate it.
