@@ -206,6 +206,40 @@ def scan(
         ))
 
 
+@app.command("export-skill", help="Generate a Claude Skill knowledge pack from a team's manifest.")
+def export_skill_cmd(
+    team: str = typer.Argument(..., help="Team name (e.g. 'Team Phoenix')."),
+    out: str = typer.Option("./skills", "--out", "-o", help="Directory to write the <slug>-context/ package into."),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """
+    Turn a team's manifest (the single source of truth) into a Claude Skill so
+    any Claude session "knows" that team's design/coordination context.
+
+      syncbot export-skill "Team Phoenix" -o ./skills
+    """
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.skill_export import export_skill
+
+    providers = _get_providers(config)
+    manifest = providers.manifests.get_team(team)
+    if not manifest:
+        console.print(f"[red]No manifest found for '{team}'.[/red] Run `syncbot validate` to list teams.")
+        raise typer.Exit(1)
+
+    dependents = providers.manifests.get_dependents(manifest.team)
+    pkg = export_skill(manifest, out, dependents=dependents)
+
+    console.print(Panel(
+        f"[green]✓[/green] Skill pack for [cyan]{manifest.team}[/cyan] written to [bold]{pkg}[/bold]\n"
+        f"  • SKILL.md  (frontmatter + body)\n"
+        f"  • references/components.md\n"
+        f"  • references/ownership.md\n"
+        f"  • references/dependencies.md",
+        title="export-skill"
+    ))
+
+
 def _teams_dir(config: str) -> str:
     import yaml
     with open(config) as f:
