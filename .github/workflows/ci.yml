@@ -37,11 +37,13 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          # Honest floor. Real coverage is ~65% (the prior 70 gate was never
-          # actually green — the committed .coverage was stale). The 0% gaps are
-          # the integration modules: live providers, onboarding flow, CLI.
-          # Ratchet this number UP as those gain coverage; don't let it slip.
-          pytest tests/ -q --cov=src --cov-report=term-missing --cov-fail-under=60
+          # Honest floor. Ratcheted 60 -> 74 after the live Atlassian providers
+          # (confluence/jira now 100%), the CLI (0% -> 80%), and the onboarding
+          # flow/generator/extractor gained real coverage. Measured floor with
+          # those tests is ~75%; the full suite sits higher (~80%). Remaining 0%
+          # gaps are mostly the heavier integration paths.
+          # Ratchet this number UP as coverage grows; don't let it slip.
+          pytest tests/ -q --cov=src --cov-report=term-missing --cov-fail-under=74
         env:
           SYNCBOT_TEST: "1"
           # Ensure no API key is set so tests exercise the heuristic path
