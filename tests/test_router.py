@@ -26,13 +26,16 @@ def bot(monkeypatch, tmp_path):
     import slack_bot as b
     import router
     from src.agent.preferences import NotificationPreferences
+    from src.agent import instrumentation
 
     # Never hit real Slack.
     monkeypatch.setattr(b.providers.slack, "post_digest", lambda *a, **k: True, raising=False)
     monkeypatch.setattr(b.providers.slack, "post_message", lambda *a, **k: True, raising=False)
-    # Isolate prefs + the unmatched-query log to tmp so tests don't pollute data/.
+    # Isolate all state files to tmp so tests don't pollute data/.
     monkeypatch.setattr(b.digest_gen, "prefs", NotificationPreferences(path=str(tmp_path / "prefs.json")))
+    monkeypatch.setattr(b.digest_gen, "ALERT_DEDUP_PATH", str(tmp_path / "dedup.json"))
     monkeypatch.setattr(router, "UNMATCHED_LOG", str(tmp_path / "unmatched.jsonl"))
+    monkeypatch.setattr(instrumentation, "STALE_FLAGS", str(tmp_path / "stale_flags.json"))
     # No network for channel-name resolution.
     monkeypatch.setattr(b, "_channel_display_name", lambda cid: cid)
     return b
@@ -112,6 +115,37 @@ def test_help_is_not_logged_as_unmatched(bot):
     bot.handle_query("help")
     assert (not os.path.exists(router.UNMATCHED_LOG)
             or "help" not in open(router.UNMATCHED_LOG).read().lower())
+
+
+# ── Trust: freshness stamping, stale flags, stats ────────────────────────────
+
+def test_team_answers_are_freshness_stamped(bot):
+    out = bot.handle_query("who owns auth").lower()
+    assert "team phoenix" in out
+    assert any(w in out for w in ["verified", "unverified", "out of date", "flagged stale"])
+
+
+def test_mark_stale_then_answer_warns_then_clears(bot):
+    assert "flagged" in bot.handle_query("mark Team Phoenix stale").lower()
+    assert "flagged stale" in bot.handle_query("who owns auth").lower()  # auth → Team Phoenix
+    assert "cleared" in bot.handle_query("Team Phoenix is verified").lower()
+    assert "flagged stale" not in bot.handle_query("who owns auth").lower()
+
+
+def test_stats_rolls_up_misses_and_flags(bot):
+    bot.handle_query("please reticulate the splines")  # an unmatched miss
+    bot.handle_query("mark Team Nova stale")
+    out = bot.handle_query("stats").lower()
+    assert "backlog" in out
+    assert "team nova" in out          # flagged team surfaced
+    assert "reticulate" in out         # unmatched query surfaced
+
+
+def test_design_status_surfaces_figma_signals(bot):
+    # Team Phoenix has synthetic figma_dev_status.json (ready-for-dev + comments).
+    out = bot.handle_query("dev status for Team Phoenix").lower()
+    assert "design status" in out
+    assert any(w in out for w in ["handoff", "comment", "ready_for_dev", "change"])
 
 
 # ── Digest targeting (needs the raw event for the channel id) ─────────────────

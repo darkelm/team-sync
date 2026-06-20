@@ -23,6 +23,15 @@ from bootstrap import (
     providers,
 )
 from src.agent.events import Event
+from src.agent import freshness, instrumentation
+
+
+def _freshness_line(team) -> str:
+    """Trust stamp for a team-scoped answer: a human stale-flag wins over age."""
+    if instrumentation.is_flagged(team.team):
+        return "⚠️ _flagged stale by a teammate — run `refresh-manifest`_"
+    return freshness.stamp(team)
+
 
 # Queries that fall through to the keyword fallback are appended here, so the
 # team's misses become a backlog of phrasings/capabilities worth adding.
@@ -116,6 +125,7 @@ HELP_BODY = (
     "• `@syncbot prep me for a sync with <team> and <team>` — meeting briefing\n"
     "• `@syncbot get me up to speed on <team>` — team briefing\n"
     "• `@syncbot is <team>'s design in sync` — Figma drift check\n"
+    "• `@syncbot dev status for <team>` — Figma ready-for-dev, open comments, recent changes\n"
     "• `@syncbot digest for <team>` — weekly digest preview (inline, no posting)\n"
     "• `@syncbot send <team>'s digest here` — deliver that team's digest to this channel\n"
     "• `@syncbot stop sending digests here` — undo the above\n"
@@ -123,7 +133,9 @@ HELP_BODY = (
     "• `@syncbot post digests` — send digests to all configured channels now\n"
     "• `@syncbot mute digests for <team>` / `resume digests for <team>` — pause control\n"
     "• `@syncbot only alert <team> on high` — set digest severity threshold\n"
-    "• `@syncbot dependencies for <team>` — dependency map"
+    "• `@syncbot dependencies for <team>` — dependency map\n"
+    "• `@syncbot mark <team> stale` — flag wrong/outdated data (clears with `<team> is verified`)\n"
+    "• `@syncbot stats` — iteration backlog: unanswered questions + flagged teams"
 )
 
 
@@ -323,11 +335,12 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
             return (
                 f"*{component}* is owned by *{team.team}*\n"
                 f"Owner: {team.owner.name} ({team.owner.slack_handle})\n"
-                f"Channel: {team.slack_channel}"
+                f"Channel: {team.slack_channel}\n"
+                f"{_freshness_line(team)}"
             )
         if suggestions:
             opts = ", ".join(f"*{c}* ({tm})" for c, tm in suggestions)
-            return f"No exact match for `{component}`. Did you mean: {opts}?"
+            return f"⚠️ No exact match for `{component}` _(low confidence)_. Did you mean: {opts}?"
         return f"No team owns `{component}` yet. Ask in #general, or the data owner may need to add it to a team manifest."
 
     # When does X ship
@@ -501,6 +514,37 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
             lines.append(f"\n_...and {len(issues) - 8} more. Run `syncbot scan` in the terminal for the full list._")
         return "\n".join(lines)
 
+    # Figma-native design status: ready-for-dev handoff, open comments, recent
+    # changes — the design signals drift alone never captures. (Before the drift
+    # handler so these distinct phrasings aren't swallowed by its "figma" trigger.)
+    if any(p in q for p in ["dev status", "ready for dev", "ready-for-dev", "design status",
+                            "handoff status", "design handoff", "design comments"]):
+        teams = _match_teams(text)
+        target = teams[0] if teams else None
+        dev = providers.figma.get_dev_status(target)
+        comments = providers.figma.get_open_comments(target)
+        changes = providers.figma.get_recent_changes(target, days=60)
+        if not (dev or comments or changes):
+            return (f"No Figma-native signals{f' for {target}' if target else ''} yet — "
+                    "live Figma ingestion activates once a `FIGMA_ACCESS_TOKEN` is set.")
+        lines = [f"*🎨 Design status{f' — {target}' if target else ''}*\n"]
+        if dev:
+            lines.append("*Dev-ready handoff:*")
+            for d in dev[:6]:
+                tix = f" → {', '.join(d.linked_tickets)}" if d.linked_tickets else ""
+                lines.append(f"• `{d.readiness.value}` *{d.name}*{tix}")
+            lines.append("")
+        if comments:
+            lines.append("*Open comments (high-priority first):*")
+            for c in comments[:5]:
+                lines.append(f"• [{c.priority.value}] {c.message[:80]} — _{c.author}_")
+            lines.append("")
+        if changes:
+            lines.append("*Recent design changes:*")
+            for ch in changes[:5]:
+                lines.append(f"• {ch.label} — _{ch.changed_at.date()}_")
+        return "\n".join(lines)
+
     # Design sync / drift
     if any(w in q for w in ["design sync", "figma", "drift", "in sync", "design system"]):
         for team in providers.manifests.get_all_teams():
@@ -550,6 +594,7 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
                     lines.append(f"\n*Figma:*")
                     for f in t.figma_files:
                         lines.append(f"• <{f.url}|{f.name}>")
+                lines.append(f"\n{_freshness_line(t)}")
                 return "\n".join(lines)
         return "Which team? Try: `@syncbot get me up to speed on Team Phoenix`"
 
@@ -574,6 +619,23 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
                 lines.append("\n*Depended on by:*")
                 lines.extend(dependents if dependents else ["• none"])
                 return "\n".join(lines)
+
+    # Data-quality: flag a team's data as stale ("this is wrong"), or clear it.
+    flag = (any(w in q for w in ["mark", "flag", "report"])
+            and any(w in q for w in ["stale", "out of date", "outdated", "wrong"]))
+    clear = any(p in q for p in ["unflag", "unmark", "clear stale", "is verified",
+                                 "now verified", "mark verified", "not stale"])
+    if flag or clear:
+        teams = _match_teams(text)
+        if not teams:
+            return ("Which team? e.g. `@syncbot mark Team Nova stale`, "
+                    "or `@syncbot Team Nova is verified` to clear.")
+        fn = instrumentation.clear_stale if clear else instrumentation.mark_stale
+        return "\n".join(fn(t) for t in teams)
+
+    # Stats / iteration backlog — misses + flagged-stale teams in one place.
+    if any(p in q for p in ["stats", "backlog", "iteration backlog", "data quality", "data-quality"]):
+        return instrumentation.stats(UNMATCHED_LOG)
 
     # Backlog: what the team asked that I couldn't answer.
     if any(p in q for p in ["unmatched", "missed question", "what did people ask",
