@@ -11,21 +11,52 @@ facts) into the standard Skill package structure:
     <team-slug>-context/
       SKILL.md            # YAML frontmatter (name, trigger-keyword description) + body
       references/
-        components.md     # code + design components, with descriptions
+        components.md     # code + design components (per-component template)
         ownership.md      # owner, channel, members
         dependencies.md   # what this team depends on / who depends on it
+        decisions.md      # decision record (only when decision logs exist)
 
-SKILL.md stays tight (progressive disclosure) and points to references/ for the
-detail. `export_skill(team_manifest, out_dir) -> Path` writes the package and
-returns the package directory.
+This reaches toward the "context stack" pattern for design-system docs that
+serve an AI agent: docs as an active context engine rather than a flat list.
+Concretely we add what team-sync's data genuinely supports —
+
+  * a **system-model** framing paragraph in SKILL.md (the team's purpose + how
+    its components and dependencies fit together — reasoning, not just values);
+  * an enriched, per-component `components.md` that follows the standard
+    component template *only where real fields back each heading* (name, path,
+    description, Figma node, deprecation lifecycle, library divergence);
+  * a `references/decisions.md` **decision record** sourced from the team's
+    decision logs (the "decisions captured as they happen" layer) — pulled via
+    a ConfluenceProvider's `get_decision_logs(team)`.
+
+We add no facts the manifest/providers don't carry: no token architecture, no
+component anatomy. SKILL.md stays tight (progressive disclosure) and points to
+references/ for the detail. `export_skill(team_manifest, out_dir) -> Path`
+writes the package and returns the package directory.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol
 
-from .core.schemas import TeamManifest
+from .core.schemas import (
+    DecisionLog,
+    FigmaComponent,
+    TeamManifest,
+)
+
+
+class _ConfluenceLike(Protocol):
+    """The slice of ConfluenceProvider this module needs: fetch decision logs.
+
+    Typed structurally so callers can pass the real provider (or a stub) without
+    importing the provider package here.
+    """
+
+    def get_decision_logs(
+        self, team: Optional[str] = None, component: Optional[str] = None
+    ) -> list: ...
 
 
 def slugify(team: str) -> str:
@@ -36,6 +67,35 @@ def slugify(team: str) -> str:
 def _esc(text: str) -> str:
     """Make a value safe for a single-line double-quoted YAML scalar."""
     return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").strip()
+
+
+def _collect_decisions(
+    manifest: TeamManifest,
+    confluence: Optional[_ConfluenceLike],
+    decisions: Optional[list[DecisionLog]],
+) -> list[DecisionLog]:
+    """Gather this team's decision logs for the decision record.
+
+    Precedence: an explicit `decisions` list wins (caller already has them);
+    otherwise we pull from a ConfluenceProvider via `get_decision_logs(team)`,
+    which returns ConfluencePages carrying a `.decision_log`. We unwrap those
+    to the DecisionLog objects. Newest first; no synthesis, just the records.
+    """
+    if decisions is not None:
+        logs = list(decisions)
+    elif confluence is not None:
+        logs = []
+        for page in confluence.get_decision_logs(team=manifest.team):
+            dl = getattr(page, "decision_log", None) or (
+                page if isinstance(page, DecisionLog) else None
+            )
+            if dl is not None:
+                logs.append(dl)
+    else:
+        return []
+    # Most recent decisions first — the agent reads the current state of the
+    # context stack from the top.
+    return sorted(logs, key=lambda d: d.date, reverse=True)
 
 
 def _build_description(manifest: TeamManifest, skill_name: str) -> str:
@@ -62,26 +122,87 @@ def _build_description(manifest: TeamManifest, skill_name: str) -> str:
 
 # ── reference files ──────────────────────────────────────────────────────────
 
-def _components_md(manifest: TeamManifest) -> str:
+def _deprecation_lines(comp) -> list[str]:
+    """Render the deprecation lifecycle for a component, only if it is set.
+
+    Code and design components share the same `deprecated`/`sunset_date`/
+    `replacement` shape, so one helper covers both.
+    """
+    if not getattr(comp, "deprecated", False):
+        return []
+    lines = ["  - **Lifecycle:** DEPRECATED"]
+    if comp.sunset_date:
+        lines[0] += f" — sunset {comp.sunset_date.isoformat()}"
+    if comp.replacement:
+        lines.append(f"  - **Replacement:** migrate to `{comp.replacement}`")
+    return lines
+
+
+def _divergence_lines(comp, divergence: dict[str, FigmaComponent]) -> list[str]:
+    """Note library divergence for a design component, if a Figma record carries it.
+
+    The manifest's DesignComponent has no divergence field; that lives on
+    FigmaComponent (`diverges_from_library`/`divergence_notes`). When the caller
+    threads those through (keyed by component name), surface it — otherwise stay
+    silent rather than invent it.
+    """
+    fc = divergence.get(comp.name)
+    if fc is None or not getattr(fc, "diverges_from_library", False):
+        return []
+    note = f" — {fc.divergence_notes}" if getattr(fc, "divergence_notes", None) else ""
+    return [f"  - **Diverges from library**{note}"]
+
+
+def _components_md(
+    manifest: TeamManifest,
+    divergence: Optional[dict[str, FigmaComponent]] = None,
+) -> str:
+    """Per-component reference, reaching toward the standard component template.
+
+    Each component gets its own heading with the fields the manifest actually
+    carries — name, path/Figma node, description, and the deprecation lifecycle
+    (deprecated / sunset_date / replacement) — plus library divergence when a
+    Figma record supplies it. Template sections the data can't back (anatomy,
+    props, states, tokens) are intentionally omitted rather than stubbed.
+    """
+    divergence = divergence or {}
     c = manifest.components
-    lines = [f"# {manifest.team} — Components", ""]
+    lines = [
+        f"# {manifest.team} — Components",
+        "",
+        "_One section per component. Only fields the manifest (and linked Figma "
+        "records) actually carry are shown — no placeholder anatomy/props/token "
+        "sections._",
+        "",
+    ]
 
     lines.append("## Code components")
+    lines.append("")
     if c.code:
         for comp in c.code:
-            lines.append(f"- **{comp.name}** (`{comp.path}`) — {comp.description}")
+            lines.append(f"### {comp.name}")
+            lines.append(f"- **Path:** `{comp.path}`")
+            lines.append(f"- **Description:** {comp.description}")
+            lines.extend(_deprecation_lines(comp))
+            lines.append("")
     else:
         lines.append("_None recorded in the manifest._")
-    lines.append("")
+        lines.append("")
 
     lines.append("## Design components")
+    lines.append("")
     if c.design:
         for comp in c.design:
-            node = f" [node {comp.figma_node_id}]" if comp.figma_node_id else ""
-            lines.append(f"- **{comp.name}**{node} — {comp.description}")
+            lines.append(f"### {comp.name}")
+            if comp.figma_node_id:
+                lines.append(f"- **Figma node:** `{comp.figma_node_id}`")
+            lines.append(f"- **Description:** {comp.description}")
+            lines.extend(_deprecation_lines(comp))
+            lines.extend(_divergence_lines(comp, divergence))
+            lines.append("")
     else:
         lines.append("_None recorded in the manifest._")
-    lines.append("")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -133,9 +254,103 @@ def _dependencies_md(manifest: TeamManifest, dependents: list[TeamManifest]) -> 
     return "\n".join(lines)
 
 
+def _decisions_md(manifest: TeamManifest, decisions: list[DecisionLog]) -> str:
+    """The decision record — decisions logged as they happen, newest first.
+
+    This is the context-stack's living "why" layer: not just what the team
+    built but the rulings that constrain it (and what was rejected). Sourced
+    from the team's decision logs; we render only the fields each log carries.
+    """
+    lines = [
+        f"# {manifest.team} — Decision record",
+        "",
+        "_Decisions captured as they happen, most recent first. Each entry is a "
+        "logged ruling — what was decided, why, what was rejected, and what it "
+        "touches — so an agent reasons from the team's actual rulings, not "
+        "guesses._",
+        "",
+    ]
+    for d in decisions:
+        status = f" · _{d.status}_" if d.status else ""
+        lines.append(f"## {d.title}{status}")
+        lines.append(f"- **Decision:** {d.decision}")
+        lines.append(f"- **Rationale:** {d.rationale}")
+        if d.alternatives_considered:
+            lines.append(
+                "- **Alternatives considered:** "
+                + "; ".join(d.alternatives_considered)
+            )
+        if d.decided_by:
+            lines.append("- **Decided by:** " + ", ".join(d.decided_by))
+        lines.append(f"- **Date:** {d.date.isoformat()}")
+        refs = []
+        if d.related_components:
+            refs.append("components: " + ", ".join(d.related_components))
+        if d.related_tickets:
+            refs.append("tickets: " + ", ".join(d.related_tickets))
+        if refs:
+            lines.append("- **Affects:** " + " · ".join(refs))
+        lines.append(f"- **Log id:** `{d.id}`")
+        lines.append("")
+    return "\n".join(lines)
+
+
 # ── SKILL.md ─────────────────────────────────────────────────────────────────
 
-def _skill_md(manifest: TeamManifest, skill_name: str, dependents: list[TeamManifest]) -> str:
+def _system_model(manifest: TeamManifest, dependents: list[TeamManifest]) -> str:
+    """A short framing paragraph: the team's purpose + how its parts fit.
+
+    The context-stack idea is that foundation docs should carry the system
+    MODEL and reasoning, not just a flat list of values. We synthesize this only
+    from manifest facts (purpose, what it builds, who it leans on / serves) so
+    the agent gets the shape of the system before the detail.
+    """
+    # Use the lead clause of the description as the purpose phrase; many
+    # manifests write "<Domain> — owns <X>", so split on the em-dash to avoid a
+    # run-on with the "It owns ..." sentence below.
+    purpose = re.split(r"\s[—-]\s", manifest.description, maxsplit=1)[0].strip().rstrip(".")
+    sentences = [f"{manifest.team} owns the {purpose.lower()} part of the system."]
+
+    code = manifest.components.code
+    design = manifest.components.design
+    if code or design:
+        built = []
+        if code:
+            built.append("code (" + ", ".join(c.name for c in code) + ")")
+        if design:
+            built.append("design (" + ", ".join(c.name for c in design) + ")")
+        sentences.append("It owns " + " and ".join(built) + ".")
+
+    rel = []
+    if manifest.dependencies:
+        rel.append("leans on " + ", ".join(d.team for d in manifest.dependencies))
+    if dependents:
+        rel.append("is leaned on by " + ", ".join(d.team for d in dependents))
+    if rel:
+        sentences.append(
+            "In the wider system it " + " and ".join(rel)
+            + " — so changes here ripple along those edges."
+        )
+
+    deprecated = [c for c in code if getattr(c, "deprecated", False)] + [
+        c for c in design if getattr(c, "deprecated", False)
+    ]
+    if deprecated:
+        sentences.append(
+            "Note: " + ", ".join(c.name for c in deprecated)
+            + " is on a deprecation path — prefer its replacement (see components.md)."
+        )
+
+    return " ".join(sentences)
+
+
+def _skill_md(
+    manifest: TeamManifest,
+    skill_name: str,
+    dependents: list[TeamManifest],
+    decisions: Optional[list[DecisionLog]] = None,
+) -> str:
+    decisions = decisions or []
     description = _build_description(manifest, skill_name)
 
     front = [
@@ -150,6 +365,12 @@ def _skill_md(manifest: TeamManifest, skill_name: str, dependents: list[TeamMani
     body.append(f"# {manifest.team} — context pack")
     body.append("")
     body.append(manifest.description)
+    body.append("")
+
+    # System model — reasoning/shape of the system before the flat lists, so the
+    # agent understands how this team's parts and dependencies fit together.
+    body.append("## System model")
+    body.append(_system_model(manifest, dependents))
     body.append("")
 
     # Ownership + channel (compact; detail in references/ownership.md)
@@ -210,10 +431,20 @@ def _skill_md(manifest: TeamManifest, skill_name: str, dependents: list[TeamMani
             body.append(f"- **{r.name}** ({r.type}): {r.url}{note}")
         body.append("")
 
+    # Recent decisions (compact; the full record is references/decisions.md).
+    if decisions:
+        body.append("## Recent decisions")
+        for d in decisions[:3]:
+            body.append(f"- **{d.title}** ({d.date.isoformat()}) — {d.decision}")
+        body.append("- See `references/decisions.md` for the full decision record.")
+        body.append("")
+
     body.append("## More detail")
     body.append("- `references/ownership.md` — owner, channel, full member roster")
     body.append("- `references/components.md` — every code + design component")
     body.append("- `references/dependencies.md` — inbound + outbound dependencies")
+    if decisions:
+        body.append("- `references/decisions.md` — decision record (decided rulings + rationale)")
     if manifest.last_verified:
         body.append("")
         body.append(f"_Manifest last verified {manifest.last_verified}._")
@@ -226,6 +457,9 @@ def export_skill(
     team_manifest: TeamManifest,
     out_dir,
     dependents: Optional[list[TeamManifest]] = None,
+    confluence: Optional[_ConfluenceLike] = None,
+    decisions: Optional[list[DecisionLog]] = None,
+    figma_components: Optional[list[FigmaComponent]] = None,
 ) -> Path:
     """Write a Claude Skill knowledge pack for a team manifest.
 
@@ -235,6 +469,19 @@ def export_skill(
         dependents: optional list of teams that depend on this one (so the
             dependencies reference can show the inbound edges). When omitted,
             only the manifest's own outbound dependencies are documented.
+        confluence: optional ConfluenceProvider. When supplied (and `decisions`
+            is not), the team's decision logs are pulled via
+            `get_decision_logs(team)` to build `references/decisions.md` — the
+            context-stack's "decisions captured as they happen" layer.
+        decisions: optional pre-fetched DecisionLogs; takes precedence over
+            `confluence`. Lets callers that already hold the logs avoid a fetch.
+        figma_components: optional FigmaComponents for this team. Used only to
+            note library divergence (`diverges_from_library`/`divergence_notes`)
+            on matching design components — never to invent component data.
+
+    The decisions and divergence inputs are optional, so the existing
+    `export_skill(manifest, out_dir, dependents=...)` call site keeps working
+    unchanged; `references/decisions.md` is written only when logs are found.
 
     Returns:
         Path to the package directory (`<out_dir>/<team-slug>-context`).
@@ -243,18 +490,29 @@ def export_skill(
     slug = slugify(team_manifest.team)
     skill_name = f"{slug}-context"
 
+    decision_logs = _collect_decisions(team_manifest, confluence, decisions)
+    divergence = {fc.name: fc for fc in (figma_components or [])}
+
     out_dir = Path(out_dir)
     pkg = out_dir / skill_name
     refs = pkg / "references"
     refs.mkdir(parents=True, exist_ok=True)
 
     (pkg / "SKILL.md").write_text(
-        _skill_md(team_manifest, skill_name, dependents), encoding="utf-8"
+        _skill_md(team_manifest, skill_name, dependents, decision_logs),
+        encoding="utf-8",
     )
-    (refs / "components.md").write_text(_components_md(team_manifest), encoding="utf-8")
+    (refs / "components.md").write_text(
+        _components_md(team_manifest, divergence), encoding="utf-8"
+    )
     (refs / "ownership.md").write_text(_ownership_md(team_manifest), encoding="utf-8")
     (refs / "dependencies.md").write_text(
         _dependencies_md(team_manifest, dependents), encoding="utf-8"
     )
+    # Only emit the decision record when the team genuinely has logged decisions.
+    if decision_logs:
+        (refs / "decisions.md").write_text(
+            _decisions_md(team_manifest, decision_logs), encoding="utf-8"
+        )
 
     return pkg

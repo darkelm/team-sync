@@ -228,14 +228,27 @@ def export_skill_cmd(
         raise typer.Exit(1)
 
     dependents = providers.manifests.get_dependents(manifest.team)
-    pkg = export_skill(manifest, out, dependents=dependents)
+    figma_components = providers.figma.get_components(manifest.team)
+    pkg = export_skill(
+        manifest,
+        out,
+        dependents=dependents,
+        confluence=providers.confluence,
+        figma_components=figma_components,
+    )
 
+    decisions_line = (
+        "\n  • references/decisions.md"
+        if (pkg / "references" / "decisions.md").exists()
+        else ""
+    )
     console.print(Panel(
         f"[green]✓[/green] Skill pack for [cyan]{manifest.team}[/cyan] written to [bold]{pkg}[/bold]\n"
         f"  • SKILL.md  (frontmatter + body)\n"
         f"  • references/components.md\n"
         f"  • references/ownership.md\n"
-        f"  • references/dependencies.md",
+        f"  • references/dependencies.md"
+        f"{decisions_line}",
         title="export-skill"
     ))
 

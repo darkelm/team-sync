@@ -17,6 +17,13 @@ def _phoenix(providers):
     return m
 
 
+def _atlas(providers):
+    """Team Atlas has decision logs + a deprecated component (token-validation)."""
+    m = providers.manifests.get_team("Team Atlas")
+    assert m is not None
+    return m
+
+
 def _parse_frontmatter(skill_md_text: str) -> dict:
     """Pull the YAML frontmatter block delimited by leading '---' fences."""
     assert skill_md_text.startswith("---\n"), "SKILL.md must open with YAML frontmatter"
@@ -98,3 +105,112 @@ def test_export_returns_package_path(providers, tmp_path):
     manifest = _phoenix(providers)
     pkg = export_skill(manifest, tmp_path)
     assert pkg == tmp_path / "team-phoenix-context"
+
+
+# ── context-stack extensions ───────────────────────────────────────────────────
+
+def test_no_decisions_file_without_provider(providers, tmp_path):
+    """Backward compatible: with no confluence/decisions input, no decisions.md
+    is written and the existing references are unchanged."""
+    manifest = _phoenix(providers)
+    pkg = export_skill(manifest, tmp_path)
+    assert not (pkg / "references" / "decisions.md").exists()
+
+
+def test_decision_record_generated_from_confluence(providers, tmp_path):
+    """A team with decision logs gets references/decisions.md sourced from the
+    ConfluenceProvider's get_decision_logs(team)."""
+    manifest = _atlas(providers)
+    # Sanity: the provider actually has a decision log for Atlas.
+    logs = providers.confluence.get_decision_logs(team=manifest.team)
+    assert logs, "fixture expects Atlas to have at least one decision log"
+
+    pkg = export_skill(manifest, tmp_path, confluence=providers.confluence)
+    decisions_md = pkg / "references" / "decisions.md"
+    assert decisions_md.is_file()
+
+    text = decisions_md.read_text()
+    assert "Decision record" in text
+    # The real Atlas decision (DEC-ATL-001) surfaces: title, rationale, deciders.
+    assert "event-driven architecture" in text
+    assert "Rationale:" in text
+    assert "Jordan Kim" in text
+    # Alternatives considered are rendered when present.
+    assert "Alternatives considered:" in text
+    assert "DEC-ATL-001" in text
+
+
+def test_decision_record_via_explicit_decisions_list(providers, tmp_path):
+    """Callers can pass pre-fetched DecisionLogs directly (precedence over a
+    provider)."""
+    manifest = _atlas(providers)
+    pages = providers.confluence.get_decision_logs(team=manifest.team)
+    decisions = [p.decision_log for p in pages if p.decision_log]
+    assert decisions
+
+    pkg = export_skill(manifest, tmp_path, decisions=decisions)
+    text = (pkg / "references" / "decisions.md").read_text()
+    assert decisions[0].title in text
+
+
+def test_skill_body_references_decisions_and_system_model(providers, tmp_path):
+    manifest = _atlas(providers)
+    pkg = export_skill(manifest, tmp_path, confluence=providers.confluence)
+    text = (pkg / "SKILL.md").read_text()
+
+    # System-model framing paragraph (reasoning, not just a list).
+    assert "## System model" in text
+    assert "Team Atlas owns the" in text
+    # It should explain how the parts fit (components + dependency edges).
+    assert "It owns code (" in text
+    assert "ripple along those edges" in text
+    # Recent-decisions teaser + pointer to the full record.
+    assert "## Recent decisions" in text
+    assert "references/decisions.md" in text
+
+
+def test_components_md_per_component_and_deprecation(providers, tmp_path):
+    """Enriched components.md: per-component headings + deprecation lifecycle for
+    Atlas's deprecated token-validation component."""
+    manifest = _atlas(providers)
+    pkg = export_skill(manifest, tmp_path)
+    text = (pkg / "references" / "components.md").read_text()
+
+    # Per-component template headings + fields.
+    assert "### api-gateway" in text
+    assert "### token-validation" in text
+    assert "**Path:**" in text
+    assert "**Description:**" in text
+    # Design components get their own sections too, with Figma node ids.
+    assert "### DataTable" in text
+    assert "456:111" in text
+
+    # Deprecation lifecycle rendered only for the deprecated component.
+    assert "DEPRECATED" in text
+    assert "sunset 2026-09-01" in text
+    assert "token-validation-v2" in text  # replacement
+
+
+def test_components_md_divergence_when_figma_record_supplied(providers, tmp_path):
+    """Library divergence is noted only when a Figma record carries it (the
+    manifest's DesignComponent has no divergence field)."""
+    from src.core.schemas import DesignStatus, FigmaComponent
+    from datetime import datetime
+
+    manifest = _atlas(providers)
+    diverging = FigmaComponent(
+        id="fc-1",
+        name="DataTable",
+        file_id="def456",
+        file_name="Atlas Data Dashboards",
+        team=manifest.team,
+        description="Reusable data table",
+        status=DesignStatus.in_progress,
+        last_modified=datetime(2026, 5, 20, 12, 0, 0),
+        diverges_from_library=True,
+        divergence_notes="Local padding override not in Nova DS",
+    )
+    pkg = export_skill(manifest, tmp_path, figma_components=[diverging])
+    text = (pkg / "references" / "components.md").read_text()
+    assert "Diverges from library" in text
+    assert "Local padding override not in Nova DS" in text
