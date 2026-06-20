@@ -24,6 +24,8 @@ from bootstrap import (
 )
 from src.agent.events import Event
 from src.agent import freshness, instrumentation
+from src.agent import manifest_health
+from src.agent.provenance import ProvenanceStore
 
 
 def _freshness_line(team) -> str:
@@ -82,6 +84,90 @@ def _match_teams(text: str) -> list[str]:
     """Teams referenced in text — full/short name or fuzzy (tolerates typos)."""
     from src.agent.fuzzy import resolve_teams
     return resolve_teams(providers, text)
+
+
+# Severity → Slack glyph for the doctor report. Mirrors the conflict-emoji idiom
+# used elsewhere in handle_query so the two reports feel like one product.
+_HEALTH_EMOJI = {"error": "🔴", "warn": "🟠", "info": "🔵"}
+
+
+def _format_health(report) -> str:
+    """Render a HealthReport as a Slack-friendly message, grouped by severity. Clean
+    graph ⇒ a single ✅ line so the team can trust a green check at a glance."""
+    n = report.teams_checked
+    if report.ok and not report.findings:
+        return (f"*✅ Manifest health — graph is clean*\n"
+                f"_{n} team manifest(s) checked: no dangling deps, no orphans, "
+                f"no missing fields, all reasonably fresh._")
+    head = "*🩺 Manifest health check*"
+    counts = (f"{len(report.errors)} error(s), {len(report.warnings)} warning(s), "
+              f"{len(report.infos)} note(s) across {n} team(s)")
+    lines = [f"{head}\n_{counts}_\n"]
+    labels = {"error": "Errors (break the graph)",
+              "warn": "Warnings (graph is degrading)",
+              "info": "Notes (worth a look)"}
+    for sev in manifest_health.SEVERITIES:
+        group = report.by_severity(sev)
+        if not group:
+            continue
+        lines.append(f"*{_HEALTH_EMOJI[sev]} {labels[sev]}:*")
+        for f in group:
+            lines.append(f"• {f.message}")
+        lines.append("")
+    if report.ok:
+        lines.append("_No errors or warnings — graph is trustworthy. Notes above are informational._")
+    else:
+        lines.append("_Fix errors first — they make dependency answers unreliable. "
+                     "Re-verify stale teams with_ `@syncbot mark <team> stale` _→_ `<team> is verified`.")
+    return "\n".join(lines)
+
+
+# Lane → plain-language verb for the governance log. Translates the membrane's
+# routing vocabulary into something a non-engineer can read at a glance.
+_LANE_PHRASE = {
+    "blocked": "was *blocked*",
+    "review": "went to *review*",
+    "digest": "was *batched into a digest*",
+    "auto": "*flowed automatically*",
+    "propose": "became a *proposal*",
+}
+
+
+def _decider_phrase(decided_by: dict) -> str:
+    """Human gloss for a provenance record's decider: a named rule, a named human, or
+    'no decision logged yet' (pending) — the 'never just the loop decided' guarantee
+    made legible."""
+    if not isinstance(decided_by, dict):
+        return "decided by an unrecorded source"
+    kind = decided_by.get("type")
+    if kind == "rule":
+        return f"by policy rule `{decided_by.get('ruleId', '?')}`"
+    if kind == "human":
+        return f"by {decided_by.get('who', 'a human')}"
+    return "no decision logged yet"
+
+
+def _format_provenance(records: list[dict]) -> str:
+    """Render recent membrane decisions as a plain-language audit trail. Newest LAST
+    from the store, so we reverse to show newest FIRST. Honest fallback when empty."""
+    if not records:
+        return ("*🧾 Governance log*\n_No routing decisions recorded yet._ The membrane "
+                "writes one audit row per decision the moment work starts flowing through "
+                "it — once that happens, `recent decisions` will show who decided what, "
+                "and when.")
+    lines = [f"*🧾 Governance log — {len(records)} most recent decision(s)*\n"]
+    for r in reversed(records):
+        item = r.get("itemRef", "(unknown)")
+        lane = _LANE_PHRASE.get(r.get("lane"), f"→ {r.get('lane', '?')}")
+        reach = r.get("reach")
+        reach_str = f" (reach {reach})" if isinstance(reach, int) else ""
+        decider = _decider_phrase(r.get("decidedBy", {}))
+        when = r.get("at", "")
+        floor = "" if r.get("passedFloor", True) else " — failed the validation floor"
+        lines.append(f"• *{item}* {lane}{reach_str}, {decider}{floor}  _{when}_")
+    lines.append("\n_This is the membrane's audit trail — every change names a rule, "
+                 "a human, or 'pending'. Nothing is ever 'just the loop'._")
+    return "\n".join(lines)
 
 
 def _load_meeting_notes(providers_=None) -> list[dict]:
@@ -182,6 +268,31 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
             "_Ask `@syncbot help` for what I can do._",
         ]
         return "\n".join(lines)
+
+    # Manifest health / doctor — keep the dependency graph (the moat) honest.
+    # Exact-ish triggers so this doesn't collide with the leadership "health of <team>"
+    # phrasings handled further down (those carry a team name; these don't).
+    if (q.strip() in ("doctor", "health check", "manifest health", "validate manifests",
+                       "check manifests", "graph health")
+            or "manifest health" in q or "health check" in q or "validate manifest" in q
+            or "check the graph" in q or "is the graph healthy" in q
+            or ("doctor" in q and "manifest" in q)):
+        report = manifest_health.check_manifests(providers)
+        return _format_health(report)
+
+    # Governance / decision log — make the membrane's audit trail visible.
+    # Tight triggers so the broader Confluence "what was decided about <topic>" search
+    # below still owns topic lookups; this owns the membrane-routing audit phrasings.
+    if (any(p in q for p in ["recent decisions", "decision log", "decisions log",
+                             "governance log", "audit trail", "audit log", "routing log",
+                             "what got blocked", "what's been blocked", "whats been blocked",
+                             "what was routed", "membrane decisions", "what got decided",
+                             "why was it blocked", "why was it routed", "show decisions"])
+            or q.strip() in ("decisions", "why")):
+        # Default to the recent slice; the store reads from PROVENANCE_PATH (or the
+        # SYNCBOT_PROVENANCE_PATH durable-volume env). Tests redirect the module path.
+        records = ProvenanceStore().recent(10)
+        return _format_provenance(records)
 
     # Proactive trigger preview — "what happens if X changes" (source-agnostic)
     if q.startswith("simulate") or "what happens if" in q or "what would happen if" in q:
