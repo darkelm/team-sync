@@ -1,7 +1,7 @@
 import os
 import yaml
 from typing import Optional
-from ...core.schemas import TeamManifest
+from ...core.schemas import GovernanceToggles, TeamManifest
 from ..base import ManifestProvider
 
 
@@ -30,6 +30,26 @@ _SYNTHETIC_TIERS: dict[str, str] = {
 }
 
 
+# Synthetic per-team governance opt-in for the demo org (see schemas.GovernanceToggles
+# / membrane.DesignerToggles). The synthetic team.yaml files carry no `governance:`
+# key, so — exactly like the tiers above — we stamp ONE team's opt-in here at load
+# time so the per-team GOVERNOR is demonstrable end to end without editing runtime
+# data/. Keyed by team name (case-insensitive). Only applied when the loaded manifest
+# has NO authored `governance:` block, so any real opt-in in a team.yaml always wins.
+#
+# Team Forge OPTS INTO small-tweaks autonomy: a low-reach, raw-tier `changed` event
+# (e.g. a `code.merged` on its `StatusIndicator`, reach 0) now flows to `auto` instead
+# of `review`. Brand/new-token/rename-removal guards stay ON (the conservative
+# defaults), so only genuinely-small leaf tweaks earn autonomy.
+#
+# DELIBERATELY NOT Team Nova or Team Phoenix: tests/test_dispatch_membrane.py dispatches
+# Team Nova with no policy and asserts REVIEW (and uses Team Phoenix). Those teams must
+# stay toggle-free for that contract to hold.
+_SYNTHETIC_GOVERNANCE: dict[str, GovernanceToggles] = {
+    "team forge": GovernanceToggles(small_tweaks_flow=True),
+}
+
+
 class LocalManifestProvider(ManifestProvider):
     def __init__(self, teams_dir: str):
         self.teams_dir = teams_dir
@@ -46,6 +66,16 @@ class LocalManifestProvider(ManifestProvider):
                 if override:
                     comp.tier = override
 
+    def _apply_synthetic_governance(self, manifest: TeamManifest) -> None:
+        """Stamp the demo per-team governance opt-in onto a manifest with none.
+
+        No-op for any team that already authors a `governance:` block in its
+        team.yaml, so authored opt-ins always take precedence over the demo map."""
+        if manifest.governance is None:
+            override = _SYNTHETIC_GOVERNANCE.get(manifest.team.lower())
+            if override:
+                manifest.governance = override
+
     def _load_all(self) -> dict[str, TeamManifest]:
         if self._cache:
             return self._cache
@@ -57,6 +87,7 @@ class LocalManifestProvider(ManifestProvider):
                         data = yaml.safe_load(f)
                     manifest = TeamManifest(**data)
                     self._apply_synthetic_tiers(manifest)
+                    self._apply_synthetic_governance(manifest)
                     self._cache[manifest.team.lower()] = manifest
         return self._cache
 

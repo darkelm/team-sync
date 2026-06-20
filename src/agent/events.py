@@ -384,12 +384,21 @@ class EventRouter:
         Every event is routed to a lane (`route_lane`) and the decision is recorded
         append-only ("who/what decided, and why"). The lane then gates the live ping:
         `auto`/`digest` do NOT ping (autonomy / batched recap); `review`/`blocked`/
-        `propose` notify as before. With the conservative `default_policy` (everything
-        → review) behaviour is unchanged — autonomy only comes from a human-granted
-        toggle policy passed in as `policy`.
+        `propose` notify as before.
+
+        POLICY RESOLUTION (the membrane as a per-team GOVERNOR): when no `policy` is
+        passed, the originating team's policy is resolved automatically from its
+        manifest `governance:` opt-in (`policy_loader.policy_for_team`). A team that
+        opted into autonomy governs by ITS toggles; a team with no opt-in (or an
+        unknown team) falls back to the conservative `default_policy` (everything →
+        review) — so behaviour is unchanged until a human grants autonomy in config.
+        An explicitly-passed `policy` always wins (the orchestrator can still override).
         """
         from . import membrane
+        from . import policy_loader
         from .provenance import ProvenanceStore
+        if policy is None:
+            policy = policy_loader.policy_for_team(event.team, self.p)
         decision = self.route_lane(event, policy)
         try:
             ProvenanceStore().append(decision.provenance)

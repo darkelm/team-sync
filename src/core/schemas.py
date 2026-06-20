@@ -62,6 +62,24 @@ class TeamMember(BaseModel):
     slack_handle: str
     email: str
 
+
+# Per-team governance opt-in (the membrane's `DesignerToggles`, surfaced in config).
+#
+# This is the human-owned autonomy surface: a team OPTS INTO automation by flipping
+# these in its team.yaml under `governance:`. The field mirrors
+# `src/agent/membrane.py` `DesignerToggles` 1:1 so `policy_loader.policy_for_team`
+# can map it straight onto the membrane and compile a ReviewPolicy. Defaults match
+# `default_toggles()` — only the "always ask" guards on, nothing flows — so a team
+# that sets `governance:` with no overrides is still fully conservative, and a
+# manifest with NO `governance:` key at all (the common case) stays exactly as it
+# was: `policy_for_team` returns the all-review `default_policy()`.
+class GovernanceToggles(BaseModel):
+    brand_changes_always_ask: bool = True
+    new_tokens_always_ask: bool = True
+    renames_removals_always_ask: bool = True
+    small_tweaks_flow: bool = False
+    spacing_tweaks_flow: bool = False
+
 # Governance consequence tier of a component, consumed by the routing membrane
 # (src/agent/membrane.py — `Tier` / `tier_of`). Three values, highest→lowest
 # consequence:
@@ -134,6 +152,10 @@ class TeamManifest(BaseModel):
     quarter_goals: list[str] = Field(default_factory=list)
     resources: list[Resource] = Field(default_factory=list)
     last_verified: Optional[date] = None
+    # Optional per-team autonomy opt-in (see GovernanceToggles). Absent ⇒ None ⇒
+    # the conservative all-review default_policy(); backward-compatible with every
+    # existing manifest that carries no `governance:` key.
+    governance: Optional[GovernanceToggles] = None
 
 
 # ── Jira ─────────────────────────────────────────────────────────────────────

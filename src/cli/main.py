@@ -426,6 +426,100 @@ def simulate_event(
         console.print(router.explain(ev))
 
 
+@app.command("policy", help="Preview a team's resolved governance lanes — what auto-flows vs. needs review vs. is blocked.")
+def policy(
+    team: str = typer.Argument(..., help="Team name (e.g. 'Team Forge')."),
+    config: str = typer.Option("config.yaml", help="Path to config.yaml"),
+):
+    """
+    Transparency / preview tool for the per-team governance membrane.
+
+    Resolves the team's policy from its manifest `governance:` opt-in (the same
+    resolution `dispatch` uses), then runs a representative set of change scenarios
+    through the REAL membrane (`EventRouter.route_lane`) — no hardcoded answers — and
+    shows which lane each would route to. Answers: "with these toggles, here's what
+    auto-flows, what still needs review, and what's blocked."
+
+      syncbot policy "Team Forge"
+    """
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from src.agent.events import EventRouter, Event
+    from src.agent import policy_loader
+
+    providers = _get_providers(config)
+    manifest = providers.manifests.get_team(team)
+    if not manifest:
+        console.print(f"[red]No manifest found for '{team}'.[/red] Run `syncbot validate` to list teams.")
+        raise typer.Exit(1)
+
+    team_name = manifest.team
+    router = EventRouter(providers)
+    resolved = policy_loader.policy_for_team(team_name, providers)
+
+    gov = manifest.governance
+    if gov is None:
+        opt_in = "[dim]no `governance:` opt-in → conservative default_policy (everything → review)[/dim]"
+    else:
+        on = [name for name in (
+            "brand_changes_always_ask", "new_tokens_always_ask", "renames_removals_always_ask",
+            "small_tweaks_flow", "spacing_tweaks_flow",
+        ) if getattr(gov, name)]
+        opt_in = "toggles ON: " + (", ".join(f"[cyan]{t}[/cyan]" for t in on) if on else "[dim](all off)[/dim]")
+
+    # Representative scenarios. Each builds a real Event; the membrane decides the lane
+    # via route_lane(...) under the resolved policy — the answers are NOT hardcoded.
+    # metadata.tier / .kind / .p1 / .novel override the inferred RouteItem fields so
+    # we can probe each precedence rung deterministically regardless of demo data.
+    scenarios = [
+        ("Low-reach raw change",      "code.merged",       {"tier": "raw", "kind": "changed"}),
+        ("High-reach raw change",     "code.merged",       {"tier": "raw", "kind": "changed", "reach_hint": "high"}),
+        ("Brand-tier change",         "design.component_changed", {"tier": "brand", "kind": "changed"}),
+        ("New token / addition",      "work.created",      {"tier": "raw", "kind": "added"}),
+        ("Rename / removal",          "code.merged",       {"tier": "raw", "kind": "renamed"}),
+        ("Breaking w/o decision (P1)", "code.merged",      {"tier": "raw", "kind": "changed", "p1": True}),
+        ("Novel / off-system change", "code.merged",       {"tier": "raw", "kind": "changed", "novel": True}),
+    ]
+
+    lane_style = {
+        "auto": "green", "digest": "cyan", "review": "yellow",
+        "blocked": "red", "propose": "magenta",
+    }
+    lane_gloss = {
+        "auto": "auto-flows (no ping)", "digest": "batched recap",
+        "review": "needs human sign-off", "blocked": "hard-blocked (P1)",
+        "propose": "joint artifact",
+    }
+
+    table = Table(title=f"Resolved governance lanes — {team_name}", show_lines=True)
+    table.add_column("Scenario", style="bold")
+    table.add_column("Event type", style="dim")
+    table.add_column("Lane")
+    table.add_column("Meaning", style="dim")
+
+    for label, etype, meta in scenarios:
+        m = dict(meta)
+        # "high reach" uses a subject many OTHER teams consume (NotificationBell, reach
+        # well over the team ceiling) so the membrane's reach gate fires; everything else
+        # uses a low-reach leaf (StatusIndicator, reach 0). Tier/kind are forced via
+        # metadata so each precedence rung is probed deterministically.
+        subject = "NotificationBell" if m.pop("reach_hint", None) == "high" else "StatusIndicator"
+        ev = Event(type=etype, subject=subject, team=team_name, source="cli", metadata=m)
+        # Pass the resolved policy explicitly — route_lane defaults to default_policy(),
+        # so the team's opt-in only governs this preview when handed in here.
+        decision = router.route_lane(ev, resolved)
+        lane = decision.lane.value
+        table.add_row(
+            label, etype,
+            f"[{lane_style.get(lane, 'white')}]{lane.upper()}[/{lane_style.get(lane, 'white')}]",
+            lane_gloss.get(lane, ""),
+        )
+
+    console.print(Panel(opt_in, title=f"[cyan]{team_name}[/cyan] governance opt-in"))
+    console.print(table)
+    console.print("[dim]Lanes are decided by the live membrane (src/agent/membrane.py), not hardcoded. "
+                  "Autonomy (AUTO) is earned only via an explicit `governance:` opt-in.[/dim]")
+
+
 @app.command("onboard", help="Set up a new initiative from ANY source — RFP, doc, transcript, or Figma content.")
 def onboard(
     source: str = typer.Argument(None, help="Path to a file (RFP, brief, transcript, export) or '-' to read from stdin."),
