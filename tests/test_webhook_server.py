@@ -109,6 +109,40 @@ class TestGithubWebhook:
     def set_env(self, monkeypatch):
         monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", _GITHUB_SECRET)
 
+    @pytest.fixture()
+    def mock_pr_files(self, app):
+        """
+        Mock the GitHub Files API (providers.github.get_pr_files).
+
+        Returns a setter: call it with a list of file paths to make the next
+        webhook resolve those paths, or with an Exception instance to simulate
+        a Files API failure (drives the fail-to-review path).
+        """
+        import webhook_server as ws
+
+        state: dict = {"files": [], "raise": None}
+
+        def _fake_get_pr_files(owner, repo, number, timeout=5.0):
+            if state["raise"] is not None:
+                raise state["raise"]
+            return state["files"]
+
+        # The app fixture wired ws._providers to the local Providers; attach the
+        # Files API method the live provider would expose (local one lacks it).
+        ws._providers.github.get_pr_files = _fake_get_pr_files  # type: ignore[attr-defined]
+
+        def _set(files=None, raise_exc=None):
+            state["files"] = files or []
+            state["raise"] = raise_exc
+
+        yield _set
+
+        # Clean up so other test classes see the unpatched local provider.
+        try:
+            del ws._providers.github.get_pr_files  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
+
     def _merged_pr_payload(self, repo="phoenix-auth") -> dict:
         return {
             "action": "closed",
@@ -118,7 +152,7 @@ class TestGithubWebhook:
                 "merged": True,
                 "merged_by": {"login": "marcus.webb"},
             },
-            "repository": {"name": repo},
+            "repository": {"name": repo, "owner": {"login": "acme"}, "full_name": f"acme/{repo}"},
         }
 
     def test_bad_signature_returns_401(self, client):
@@ -148,7 +182,9 @@ class TestGithubWebhook:
         )
         assert resp.status_code == 401
 
-    def test_valid_merged_pr_dispatches(self, client, dispatch_stub):
+    def test_valid_merged_pr_dispatches(self, client, dispatch_stub, mock_pr_files):
+        # Real file path under Team Phoenix's `login` component (src/auth/login).
+        mock_pr_files(["src/auth/login/page.tsx"])
         payload = self._merged_pr_payload()
         body = json.dumps(payload).encode()
         resp = client.post(
@@ -164,11 +200,16 @@ class TestGithubWebhook:
         assert resp.status_code == 200
         data = resp.json()
         assert data["dispatched"] == 1
+        assert data["resolution"] == "resolved"
         # Verify the Event that was dispatched
         assert len(dispatch_stub) == 1
         event = dispatch_stub[0]
         assert event.type == "code.merged"
         assert event.source == "github"
+        # Subject is the resolved component NAME, not the PR title.
+        assert event.subject == "login"
+        assert event.metadata["files_changed"] == ["src/auth/login/page.tsx"]
+        assert event.metadata["components_touched"] == ["login"]
 
     def test_non_merged_pr_ignored(self, client, dispatch_stub):
         """PR closed but not merged → 200 dispatched=0."""
@@ -209,7 +250,8 @@ class TestGithubWebhook:
         assert resp.status_code == 200
         assert resp.json()["dispatched"] == 0
 
-    def test_duplicate_delivery_ignored(self, client, dispatch_stub):
+    def test_duplicate_delivery_ignored(self, client, dispatch_stub, mock_pr_files):
+        mock_pr_files(["src/auth/login/page.tsx"])
         payload = self._merged_pr_payload()
         body = json.dumps(payload).encode()
         headers = {
@@ -228,8 +270,9 @@ class TestGithubWebhook:
         assert r2.json()["dispatched"] == 0
         assert r2.json().get("ignored") == "duplicate delivery"
 
-    def test_repo_to_team_resolution(self, client, dispatch_stub):
+    def test_repo_to_team_resolution(self, client, dispatch_stub, mock_pr_files):
         """A repo named 'phoenix-auth' should resolve to Team Phoenix."""
+        mock_pr_files(["src/auth/login/page.tsx"])
         payload = self._merged_pr_payload(repo="phoenix-auth")
         body = json.dumps(payload).encode()
         resp = client.post(
@@ -246,6 +289,116 @@ class TestGithubWebhook:
         assert len(dispatch_stub) == 1
         event = dispatch_stub[0]
         assert "phoenix" in event.team.lower() or event.team == ""  # may or may not resolve
+
+    # ── Reach-signal resolution (the bug fix) ─────────────────────────────────
+
+    def test_files_api_resolves_most_specific_component(self, client, dispatch_stub, mock_pr_files):
+        """
+        A file under src/auth/login must resolve to `login` (most specific),
+        NOT the broader `auth` component whose path is also a prefix.
+        """
+        mock_pr_files(["src/auth/login/oauth.ts"])
+        payload = self._merged_pr_payload()
+        body = json.dumps(payload).encode()
+        resp = client.post(
+            "/webhooks/github",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Hub-Signature-256": _github_sig(body),
+                "X-GitHub-Event": "pull_request",
+                "X-GitHub-Delivery": "gh-specific-01",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["components_touched"] == ["login"]
+        assert dispatch_stub[0].subject == "login"
+
+    def test_files_api_multiple_components_one_event_each(self, client, dispatch_stub, mock_pr_files):
+        """A PR touching two distinct components dispatches one event per component."""
+        mock_pr_files(["src/auth/tokens/refresh.ts", "src/auth/__init__.py"])
+        payload = self._merged_pr_payload()
+        body = json.dumps(payload).encode()
+        resp = client.post(
+            "/webhooks/github",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Hub-Signature-256": _github_sig(body),
+                "X-GitHub-Event": "pull_request",
+                "X-GitHub-Delivery": "gh-multi-01",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # token-manager (src/auth/tokens) + auth (src/auth) — two distinct components.
+        assert set(data["components_touched"]) == {"token-manager", "auth"}
+        assert data["dispatched"] == 2
+        subjects = {e.subject for e in dispatch_stub}
+        assert subjects == {"token-manager", "auth"}
+        # PR title never leaks into the subject when real paths resolved.
+        assert "feat: implement PKCE" not in subjects
+
+    def test_files_api_no_owned_paths_falls_back_to_title_conservatively(
+        self, client, dispatch_stub, mock_pr_files
+    ):
+        """
+        A merge touching only paths we don't own still emits ONE conservative
+        event (keyed on PR title) — the merge is never silently dropped — but
+        components_touched is empty so reach stays conservative.
+        """
+        mock_pr_files(["docs/README.md", "infra/terraform/main.tf"])
+        payload = self._merged_pr_payload()
+        body = json.dumps(payload).encode()
+        resp = client.post(
+            "/webhooks/github",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Hub-Signature-256": _github_sig(body),
+                "X-GitHub-Event": "pull_request",
+                "X-GitHub-Delivery": "gh-noown-01",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["resolution"] == "resolved"   # API succeeded; just nothing owned
+        assert data["components_touched"] == []
+        assert data["dispatched"] == 1
+        assert dispatch_stub[0].subject == "feat: implement PKCE"
+
+    def test_files_api_failure_degrades_to_review_not_dropped(
+        self, client, dispatch_stub, mock_pr_files
+    ):
+        """
+        Fail-to-review, never fail-to-auto: if the Files API call raises, the
+        event is NOT dropped (a human still sees the merge) and NO component is
+        fabricated — resolution is flagged 'review' and reach stays conservative.
+        """
+        import httpx
+
+        mock_pr_files(raise_exc=httpx.ConnectError("boom"))
+        payload = self._merged_pr_payload()
+        body = json.dumps(payload).encode()
+        resp = client.post(
+            "/webhooks/github",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Hub-Signature-256": _github_sig(body),
+                "X-GitHub-Event": "pull_request",
+                "X-GitHub-Delivery": "gh-fail-01",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["resolution"] == "review"
+        assert data["components_touched"] == []
+        assert data["dispatched"] == 1            # NOT dropped
+        event = dispatch_stub[0]
+        assert event.subject == "feat: implement PKCE"   # conservative, not a fake component
+        assert event.metadata["resolution"] == "review"
+        assert event.metadata["files_changed"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -541,3 +694,76 @@ class TestGenericWebhook:
                 headers={"X-Webhook-Token": _SHARED_SECRET},
             )
             assert resp.status_code == 200, f"Expected 200 for type={event_type}, got {resp.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# LiveGitHubProvider.get_pr_files — the new Files API method
+# ---------------------------------------------------------------------------
+#
+# Unit-level coverage for the actual HTTP call the webhook handler relies on.
+# Mocks httpx at the provider's module boundary (mirrors test_live_atlassian.py)
+# — no real token, no network.
+
+class _FakeResp:
+    def __init__(self, payload, status_code=200):
+        self._payload = payload
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import httpx
+            raise httpx.HTTPStatusError(f"HTTP {self.status_code}", request=None, response=None)
+
+    def json(self):
+        return self._payload
+
+
+class TestLiveGetPrFiles:
+    @pytest.fixture()
+    def provider(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
+        from src.providers.live.github import LiveGitHubProvider
+        return LiveGitHubProvider()
+
+    def test_returns_real_filenames(self, provider, monkeypatch):
+        import src.providers.live.github as gh
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            assert "/repos/acme/phoenix-auth/pulls/42/files" in url
+            return _FakeResp([
+                {"filename": "src/auth/login/page.tsx"},
+                {"filename": "src/auth/tokens/refresh.ts"},
+            ])
+
+        monkeypatch.setattr(gh.httpx, "get", fake_get)
+        files = provider.get_pr_files("acme", "phoenix-auth", 42)
+        assert files == ["src/auth/login/page.tsx", "src/auth/tokens/refresh.ts"]
+
+    def test_paginates_until_short_page(self, provider, monkeypatch):
+        import src.providers.live.github as gh
+
+        # Page 1 returns a full 100-item page; page 2 returns a short page → stop.
+        page1 = [{"filename": f"src/auth/f{i}.ts"} for i in range(100)]
+        page2 = [{"filename": "src/auth/tokens/last.ts"}]
+        seen_pages = []
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            seen_pages.append(params["page"])
+            return _FakeResp(page1 if params["page"] == 1 else page2)
+
+        monkeypatch.setattr(gh.httpx, "get", fake_get)
+        files = provider.get_pr_files("acme", "phoenix-auth", 7)
+        assert seen_pages == [1, 2]
+        assert len(files) == 101
+        assert files[-1] == "src/auth/tokens/last.ts"
+
+    def test_http_error_propagates(self, provider, monkeypatch):
+        import httpx
+        import src.providers.live.github as gh
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            raise httpx.ConnectError("network down")
+
+        monkeypatch.setattr(gh.httpx, "get", fake_get)
+        with pytest.raises(httpx.HTTPError):
+            provider.get_pr_files("acme", "phoenix-auth", 99)

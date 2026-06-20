@@ -142,30 +142,56 @@ def _jira_project_to_team(project_key: str, providers: Providers) -> str:
     return ""
 
 
-def _derive_component_from_github(payload: dict) -> str:
+def _components_for_files(files_changed: list[str], providers: Providers) -> list[str]:
     """
-    Derive a component name from a merged PR payload.
+    Resolve real changed-file paths to manifest code-component names.
 
-    Priority:
-    1. Changed files: find the first manifest code-component whose path is a
-       prefix of any changed file path.
-    2. PR title: return the title as-is (human-readable).
+    For each file we pick the *most specific* (longest-path) code component whose
+    path is a prefix of the file — so e.g. ``src/auth/login/page.tsx`` resolves to
+    the ``login`` component, not the broader ``auth`` one. Returns the de-duplicated
+    set of touched component names, order-preserving (first touch wins).
+
+    This is the reach signal at its source: these names feed Event.subject →
+    EventRouter._consumers_of(), which maps a touched component to every team that
+    owns, lists, or shares a journey with it. Garbage in (a PR title) meant garbage
+    reach; real file paths make it reliable.
     """
-    providers = get_providers()
-    files_changed: list[str] = payload.get("pull_request", {}).get("changed_files_paths", [])
-    # GitHub webhooks don't include file paths in the push payload directly;
-    # they come from a separate API call. Here we use what's available in the
-    # webhook body under commits or head_commit, or fall back to the PR title.
-    # For a robust implementation wire the GitHub Files API; for now we match
-    # against what Zapier/GitHub App payloads typically include.
-    if files_changed:
-        for team in providers.manifests.get_all_teams():
-            for comp in team.components.code:
-                for f in files_changed:
-                    if f.startswith(comp.path):
-                        return comp.name
-    # Fallback: PR title
-    return payload.get("pull_request", {}).get("title", "")
+    # Build (path, name) pairs once, longest path first so the first prefix hit
+    # for a given file is also the most specific.
+    code_paths: list[tuple[str, str]] = []
+    for team in providers.manifests.get_all_teams():
+        for comp in team.components.code:
+            if comp.path:
+                code_paths.append((comp.path, comp.name))
+    code_paths.sort(key=lambda pc: len(pc[0]), reverse=True)
+
+    touched: list[str] = []
+    for f in files_changed:
+        for path, name in code_paths:
+            if f == path or f.startswith(path.rstrip("/") + "/") or f.startswith(path):
+                if name not in touched:
+                    touched.append(name)
+                break  # most-specific match for this file found
+    return touched
+
+
+def _derive_components_from_github(
+    owner: str, repo: str, pr: dict, providers: Providers
+) -> tuple[list[str], list[str]]:
+    """
+    Resolve a merged PR to (files_changed, components_touched) using the live
+    GitHub Files API — the only reliable source of real file paths, since PR/push
+    webhook payloads do NOT include them.
+
+    Fail-safe (integration scoping Q1): on any Files API failure we re-raise to the
+    caller. We never fabricate paths and never fall back to matching the PR title
+    as a component — that produced the unreliable reach this fix exists to kill.
+    The handler degrades to the conservative `review` path instead.
+    """
+    number = pr.get("number")
+    files_changed = providers.github.get_pr_files(owner, repo, number)
+    components_touched = _components_for_files(files_changed, providers)
+    return files_changed, components_touched
 
 
 def _figma_file_to_team(file_id: str, file_name: str, providers: Providers) -> str:
@@ -317,29 +343,89 @@ async def webhook_github(
         return JSONResponse({"dispatched": 0, "ignored": f"event={event_type} action={action} merged={merged}"})
 
     providers = get_providers()
-    repo_name = payload.get("repository", {}).get("name", "")
-    team = _repo_to_team(repo_name, providers)
-    component = _derive_component_from_github(payload)
-    if not component:
-        component = pr.get("title", repo_name)
-
-    event = Event(
-        type="code.merged",
-        subject=component,
-        source="github",
-        team=team,
-        metadata={
-            "pr_number": pr.get("number"),
-            "pr_title": pr.get("title"),
-            "repo": repo_name,
-            "merged_by": pr.get("merged_by", {}).get("login", ""),
-        },
+    repository = payload.get("repository", {})
+    repo_name = repository.get("name", "")
+    owner = repository.get("owner", {}).get("login", "") or (
+        repository.get("full_name", "").split("/")[0] if repository.get("full_name") else ""
     )
+    team = _repo_to_team(repo_name, providers)
+    pr_title = pr.get("title", "")
+
+    # ── Reach resolution ──────────────────────────────────────────────────────
+    # GitHub PR/push payloads carry NO file paths, so we fetch them from the
+    # Files API and prefix-match against each team's code-component paths. The
+    # resolved component names are what EventRouter._consumers_of() uses to find
+    # every team a merge reaches — so they must be real, not a PR title.
+    files_changed: list[str] = []
+    components_touched: list[str] = []
+    resolution = "resolved"
+    try:
+        files_changed, components_touched = _derive_components_from_github(
+            owner, repo_name, pr, providers
+        )
+    except Exception as e:
+        # Fail-to-review, never fail-to-auto (integration scoping Q1): the Files
+        # API is unavailable, so we cannot trust component resolution. Degrade to
+        # the conservative path — keep the event (a human still sees it and can
+        # review reach manually) but DON'T fabricate a component or silently drop
+        # it. Reach via _consumers_of will be empty/title-based, not wrong-confident.
+        log.warning(
+            "github code.merged: Files API failed, degrading to review repo=%s pr=%s: %s",
+            repo_name, pr.get("number"), e,
+        )
+        resolution = "review"
 
     router = EventRouter(providers)
-    n = router.dispatch(event)
-    log.info("github code.merged dispatched=%d repo=%s component=%s", n, repo_name, component)
-    return JSONResponse({"dispatched": n})
+
+    def _base_metadata(extra: dict) -> dict:
+        md = {
+            "pr_number": pr.get("number"),
+            "pr_title": pr_title,
+            "repo": repo_name,
+            "merged_by": pr.get("merged_by", {}).get("login", ""),
+            "files_changed": files_changed,
+            "components_touched": components_touched,
+            "resolution": resolution,
+        }
+        md.update(extra)
+        return md
+
+    total = 0
+    if components_touched:
+        # One event per touched component so reach is computed component-by-
+        # component (mirrors the Figma handler). Each subject is a real name.
+        for comp_name in components_touched:
+            event = Event(
+                type="code.merged",
+                subject=comp_name,
+                source="github",
+                team=team,
+                metadata=_base_metadata({"component": comp_name}),
+            )
+            total += router.dispatch(event)
+    else:
+        # Either the PR touched nothing we own, OR resolution degraded to review.
+        # Either way emit a single conservative event keyed on the PR title so the
+        # owning channel still sees the merge; reach stays conservative.
+        subject = pr_title or repo_name
+        event = Event(
+            type="code.merged",
+            subject=subject,
+            source="github",
+            team=team,
+            metadata=_base_metadata({"component": ""}),
+        )
+        total += router.dispatch(event)
+
+    log.info(
+        "github code.merged dispatched=%d repo=%s resolution=%s components=%s",
+        total, repo_name, resolution, components_touched,
+    )
+    return JSONResponse({
+        "dispatched": total,
+        "resolution": resolution,
+        "components_touched": components_touched,
+    })
 
 
 # ---------------------------------------------------------------------------

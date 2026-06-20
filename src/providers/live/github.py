@@ -4,6 +4,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from ...core.schemas import PullRequest, PRStatus
 from ..base import GitHubProvider
+from ...log import get_logger
+
+log = get_logger(__name__)
 
 
 class LiveGitHubProvider(GitHubProvider):
@@ -16,6 +19,44 @@ class LiveGitHubProvider(GitHubProvider):
         r = httpx.get(f"https://api.github.com{path}", params=params, headers=self.headers)
         r.raise_for_status()
         return r.json()
+
+    def get_pr_files(self, owner: str, repo: str, number: int, timeout: float = 5.0) -> list[str]:
+        """
+        Return the real changed-file paths for a merged PR via the GitHub Files API.
+
+        GET /repos/{owner}/{repo}/pulls/{number}/files, paginated (100/page).
+        GitHub PR/push webhook payloads do NOT carry file paths, so this is the
+        only reliable source for resolving which components a merge touched.
+
+        On any HTTP/transport failure this logs and re-raises so the caller can
+        decide how to degrade — it never silently returns a partial/empty list
+        that would masquerade as "nothing changed".
+        """
+        files: list[str] = []
+        page = 1
+        while True:
+            try:
+                r = httpx.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files",
+                    params={"per_page": 100, "page": page},
+                    headers=self.headers,
+                    timeout=timeout,
+                )
+                r.raise_for_status()
+            except httpx.HTTPError as e:
+                log.warning(
+                    "github get_pr_files failed owner=%s repo=%s pr=%s page=%d: %s",
+                    owner, repo, number, page, e,
+                )
+                raise
+            batch = r.json()
+            if not batch:
+                break
+            files.extend(f["filename"] for f in batch if f.get("filename"))
+            if len(batch) < 100:
+                break
+            page += 1
+        return files
 
     def _to_pr(self, item: dict, team: str = "") -> PullRequest:
         return PullRequest(
