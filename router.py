@@ -26,6 +26,7 @@ from src.agent.events import Event
 from src.agent import freshness, instrumentation
 from src.agent import manifest_health
 from src.agent.provenance import ProvenanceStore
+from src.agent.propose import ProposalStore
 
 
 def _freshness_line(team) -> str:
@@ -170,6 +171,41 @@ def _format_provenance(records: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _is_open_proposal(row: dict) -> bool:
+    """A proposal is OPEN while its decider is PENDING — the propose lane's resting
+    state ('the loop never decides'). Once a human resolves it (decidedBy type 'human'),
+    it is no longer an open joint artifact and drops off this surface."""
+    decided = row.get("decidedBy")
+    return isinstance(decided, dict) and decided.get("type") == "pending"
+
+
+def _format_proposals(rows: list[dict]) -> str:
+    """Render OPEN design↔code proposals as JOINT ARTIFACTS — not one-way alerts.
+    A proposal is a designer's deliberate divergence that a dev evaluates, so each one
+    names BOTH owners and frames it as needing a shared decision. Rows come newest-LAST
+    from the store; we filter to PENDING and show newest FIRST. Honest when empty."""
+    open_rows = [r for r in rows if _is_open_proposal(r)]
+    if not open_rows:
+        return "No open design↔code proposals right now."
+    lines = [f"*🤝 Open design↔code proposals — {len(open_rows)} awaiting a joint decision*\n"]
+    for r in reversed(open_rows):
+        component = r.get("component", "(unknown component)")
+        notes = r.get("divergenceNotes") or "_no divergence note recorded_"
+        design_owner = r.get("designOwner") or "unassigned"
+        code_owner = r.get("codeOwner") or "unassigned"
+        figma_url = r.get("figmaUrl")
+        reach = r.get("reach")
+        reach_str = f" · used by {reach} other consumer(s)" if isinstance(reach, int) else ""
+        link = f"  <{figma_url}|open in Figma>" if figma_url else ""
+        lines.append(f"• *{component}* — diverges: {notes}{reach_str}")
+        lines.append(f"    design: *{design_owner}*  ↔  code: *{code_owner}* "
+                     f"— needs a joint decision{link}")
+    lines.append("\n_Each of these is a JOINT artifact: a designer proposed a deliberate "
+                 "divergence and a dev evaluates it. The loop never decides — these stay "
+                 "open until both owners agree to accept or decline._")
+    return "\n".join(lines)
+
+
 def _load_meeting_notes(providers_=None) -> list[dict]:
     import glob, json
     # Scope to the given project's teams dir; fall back to config.yaml for
@@ -293,6 +329,24 @@ def handle_query(text: str, eng: dict | None = None, role: str = "ic") -> str:
         # SYNCBOT_PROVENANCE_PATH durable-volume env). Tests redirect the module path.
         records = ProvenanceStore().recent(10)
         return _format_provenance(records)
+
+    # Open design↔code proposals — the joint artifacts the propose lane produces.
+    # Rendered as a SHARED decision (both owners named), never a one-way alert. Triggers
+    # are scoped tightly so they don't collide with the design-sync/"drift" handler (which
+    # owns "design system"/"in sync") or the scan/predict "conflict" handlers further down —
+    # these specific design↔code phrasings are claimed here first.
+    if (q.strip() in ("proposals", "open proposals", "divergences", "joint artifacts",
+                       "what's diverging", "whats diverging")
+            or any(p in q for p in ["open proposals", "design code conflicts",
+                                    "design-code conflicts", "design dev conflicts",
+                                    "design-dev conflicts", "what's diverging",
+                                    "whats diverging", "joint artifacts",
+                                    "open divergences", "pending proposals"])):
+        # Read-only, same shape as the governance-log command: instantiate the store with
+        # no arg so it reads PROPOSALS_PATH (or the SYNCBOT_PROPOSALS_PATH durable-volume
+        # env). Tests redirect the module path.
+        rows = ProposalStore().recent(20)
+        return _format_proposals(rows)
 
     # Proactive trigger preview — "what happens if X changes" (source-agnostic)
     if q.startswith("simulate") or "what happens if" in q or "what would happen if" in q:
